@@ -24,13 +24,9 @@
       >
           <div 
             class="grid-cell" 
-            :style="{
-              width: gridConfig.cellWidth + 'px'
-            }" 
             v-for="item in COLUMNS"
             :key="item"
           >
-            &nbsp;
         </div>
       </div>
 
@@ -65,6 +61,8 @@ import {
   snapToGrid, 
   calculateAvailableSpace,
   calculateContainerHeight,
+  autoFillComponent,
+  resizeComponentWithAutoFill,
 } from '../utils/grid';
 
 const gridConfig = reactive<GridConfig>({
@@ -91,11 +89,12 @@ const updateCellWidth = () => {
   containerInfo.width = container.clientWidth
   containerInfo.height = container.clientHeight
   
-  const availableWidth = containerInfo.width - 20 // 减去 padding
-  const totalGapWidth = (24 - 1) * gridConfig.gap // 假设最大24列
-  const cellWidth = (availableWidth - totalGapWidth) / 24
+  // 固定24列，直接计算列宽
+  const totalGapWidth = 23 * gridConfig.gap
+  const cellWidth = (containerInfo.width - totalGapWidth) / 24
   
-  gridConfig.cellWidth = Math.max(cellWidth, 20) // 最小列宽20px
+  // 保留2位小数，设置最小列宽
+  gridConfig.cellWidth = Math.max(parseFloat(cellWidth.toFixed(2)), 20)
 }
 
 // 计算容器需要的高度
@@ -160,14 +159,6 @@ const updateContainerInfo = () => {
   }
 }
 
-// 监听容器宽度变化
-// const updateContainerWidth = () => {
-//   if (gridContainer.value) {
-//     containerWidth.value = gridContainer.value.clientWidth
-//     // containerHeight.value = gridContainer.value.clientHeight
-//   }
-// }
-
 const addComponents = (selectedComponents: ComponentItemModel[]) => {
   let addedCount = 0
 
@@ -181,7 +172,8 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
         y: position.y
       }
       
-      console.log('newComponent', newComponent)
+      autoFillComponent(newComponent, gridConfig)
+
       components.value.push(newComponent)
       addedCount++
     }
@@ -207,7 +199,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
   const componentIndex = components.value.findIndex(c => c.id === id)
   if (componentIndex === -1) return
   
-  const component = components.value[componentIndex]
+  const component = components.value[componentIndex]!
   const newSize: Size = {
     width: newData.width || component!.width,
     height: newData.height || component!.height
@@ -218,12 +210,13 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
     y: newData.y !== undefined ? newData.y : component!.y
   }
   
-  // 验证新位置和尺寸
-  if (validatePosition(components.value, id, newPosition, newSize, containerInfo, gridConfig)) {
-    // 更新组件
-    Object.assign({}, component, newPosition, newSize)
     
-    // 重新组织布局
+  // 应用自动填充
+  const filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
+  
+  // 验证新位置和尺寸
+  if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {
+    Object.assign({}, component, newPosition, filledSize)
     reorganizeLayout(components.value, containerInfo, gridConfig)
   }
 }
@@ -390,7 +383,7 @@ onUnmounted(() => {
   height: calc(100% - 60px);
   overflow-y: auto;
   padding: 10px;
-  background: #ebecec;
+  background: #fff;
 }
 
 .grid-content {
@@ -416,11 +409,11 @@ onUnmounted(() => {
   bottom: 0;
   pointer-events: none;
   z-index: 0;
-  background: #ebecec;
+  background: #fff;
   display: grid;
 
   .grid-cell {
-    background: white;
+    background: #f0f5f5;
     height: 100%;
   }
 }

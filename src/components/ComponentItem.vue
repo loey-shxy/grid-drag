@@ -31,6 +31,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
+import { resizeComponentWithAutoFill } from '../utils/grid'
 
 interface Props {
   component: ComponentItemModel
@@ -50,21 +51,12 @@ const isResizing = ref(false)
 
 // 计算组件样式
 const componentStyle = computed(() => {
-  // const pos = gridPosition.value
-  // const size = gridSize.value
-  
-  // return {
-  //   gridColumn: `${pos.x + 1} / span ${size.width}`,
-  //   gridRow: `${pos.y + 1} / span ${size.height}`,
-  //   transform: isDragging.value ? 'scale(1.02)' : 'none',
-  //   zIndex: isDragging.value || isResizing.value ? 100 : 1
-  // }
   return {
     position: 'absolute',
     left: `${props.component.x}px`,
     top: `${props.component.y}px`,
-    width: `${props.component.width}px`,
-    height: `${props.component.height}px`,
+    width: `${props.component.width + 2}px`,
+    height: `${props.component.height + 2}px`,
     transform: isDragging.value ? 'scale(1.02)' : 'none',
     zIndex: isDragging.value || isResizing.value ? 100 : 1
   }
@@ -157,9 +149,9 @@ const onResizeStart = (position: string, e: MouseEvent) => {
       case 'right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         // 右边界检查
-        if (newX + newWidth > containerWidth) {
-          newWidth = containerWidth - newX
-        }
+        // if (newX + newWidth > containerWidth) {
+        //   newWidth = containerWidth - newX
+        // }
         break
         
       case 'left':
@@ -170,9 +162,9 @@ const onResizeStart = (position: string, e: MouseEvent) => {
       case 'bottom':
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         // 下边界检查
-        if (newY + newHeight > containerHeight) {
-          newHeight = containerHeight - newY
-        }
+        // if (newY + newHeight > containerHeight) {
+        //   newHeight = containerHeight - newY
+        // }
         break
         
       case 'top':
@@ -185,9 +177,9 @@ const onResizeStart = (position: string, e: MouseEvent) => {
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         newY = Math.max(0, startYPos + deltaY)
         // 边界检查
-        if (newX + newWidth > containerWidth) {
-          newWidth = containerWidth - newX
-        }
+        // if (newX + newWidth > containerWidth) {
+        //   newWidth = containerWidth - newX
+        // }
         break
         
       case 'top-left':
@@ -202,32 +194,54 @@ const onResizeStart = (position: string, e: MouseEvent) => {
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         newX = Math.max(0, startXPos + deltaX)
         // 边界检查
-        if (newY + newHeight > containerHeight) {
-          newHeight = containerHeight - newY
-        }
+        // if (newY + newHeight > containerHeight) {
+        //   newHeight = containerHeight - newY
+        // }
         break
         
       case 'bottom-right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         // 边界检查
-        if (newX + newWidth > containerWidth) {
-          newWidth = containerWidth - newX
-        }
-        if (newY + newHeight > containerHeight) {
-          newHeight = containerHeight - newY
-        }
+        // if (newX + newWidth > containerWidth) {
+        //   newWidth = containerWidth - newX
+        // }
+        // if (newY + newHeight > containerHeight) {
+        //   newHeight = containerHeight - newY
+        // }
         break
+    }
+
+    // 边界检查
+    if (newX + newWidth > containerWidth) {
+      newWidth = containerWidth - newX
+    }
+    if (newY + newHeight > containerHeight) {
+      newHeight = containerHeight - newY
     }
     
     // 确保最小尺寸
     newWidth = Math.max(props.component.minWidth || 100, newWidth)
     newHeight = Math.max(props.component.minHeight || 60, newHeight)
     
-    // 发射 resize 事件
+      // 应用自动填充
+      const filledSize = resizeComponentWithAutoFill(
+      props.component, 
+      { width: newWidth, height: newHeight }, 
+      props.gridConfig
+    )
+    
+    // 边界检查（填充后）
+    if (newX + filledSize.width > containerWidth) {
+      filledSize.width = containerWidth - newX
+    }
+    if (newY + filledSize.height > containerHeight) {
+      filledSize.height = containerHeight - newY
+    }
+
     emit('resize', props.component.id, {
-      width: Math.round(newWidth),
-      height: Math.round(newHeight),
+      width: parseFloat(filledSize.width.toFixed(2)),
+      height: parseFloat(filledSize.height.toFixed(2)),
       x: Math.round(newX),
       y: Math.round(newY)
     })
@@ -264,7 +278,7 @@ const getComponentDescription = (type: string) => {
 <style lang="scss" scoped>
 .component-item {
   background: white;
-  border: 2px solid #e9ecef;
+  border: 1px solid #e9ecef;
   border-radius: 8px;
   position: relative;
   cursor: move;
@@ -275,7 +289,6 @@ const getComponentDescription = (type: string) => {
   &:hover {
     border-color: #007bff;
     box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
-    transform: translateY(-1px);
   }
 
   &:active {
