@@ -60,7 +60,7 @@ import {
   findAvailablePosition, 
   snapToGrid, 
   calculateAvailableSpace,
-  calculateContainerHeight,
+  canAddComponent,
   autoFillComponent,
   resizeComponentWithAutoFill,
 } from '../utils/grid';
@@ -81,6 +81,12 @@ const components = ref<ComponentItemModel[]>([])
 const addComponentRef = ref()
 const gridContainer = ref<HTMLElement>()
 
+// 计算容器高度 - 不允许超出容器高度
+const containerHeight = computed(() => {
+  return containerInfo.height // 直接使用容器高度，不允许滚动
+})
+
+
 // 计算列宽（自适应）
 const updateCellWidth = () => {
   if (!gridContainer.value) return
@@ -96,11 +102,6 @@ const updateCellWidth = () => {
   // 保留2位小数，设置最小列宽
   gridConfig.cellWidth = Math.max(parseFloat(cellWidth.toFixed(2)), 20)
 }
-
-// 计算容器需要的高度
-const containerHeight = computed(() => {
-  return calculateContainerHeight(components.value, gridConfig)
-})
 
 
 // 计算网格样式
@@ -137,7 +138,7 @@ const openModal = () => {
 // 向子组件提供布局容器信息
 provide('layoutContainer', {
   value: {
-    components,
+    components: components.value,
     gridConfig,
     containerInfo,
     columns: COLUMNS,
@@ -152,49 +153,126 @@ const onScroll = (e: Event) => {
   containerInfo.scrollTop = target.scrollTop
 }
 
-// 监听容器宽度变化
-const updateContainerInfo = () => {
-  if (gridContainer.value) {
-    updateCellWidth()
-  }
-}
+// const addComponents = (selectedComponents: ComponentItemModel[]) => {
+//   let addedCount = 0
+//   const failedComponents: string[] = []
 
+//   selectedComponents.forEach(comp => {
+//     const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
+//     if (position) {
+//        const newComponent: ComponentItemModel = {
+//         ...comp,
+//         id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+//         x: position.x,
+//         y: position.y
+//       }
+      
+//       autoFillComponent(newComponent, gridConfig)
+
+//       components.value.push(newComponent)
+//       addedCount++
+//     }
+//   })
+
+//   if (addedCount > 0) {
+//     console.log(`成功添加 ${addedCount} 个组件`)
+//     // 添加后重新组织布局
+//     nextTick(() => {
+//       reorganizeLayout(components.value, containerInfo, gridConfig)
+//     })
+//   }
+  
+//   if (addedCount < selectedComponents.length) {
+//     console.warn('部分组件因空间不足未能添加')
+//   }
+  
+//   addComponentRef.value.close()
+// }
+
+// 组件调整大小
+
+// 添加组件时的优化逻辑
 const addComponents = (selectedComponents: ComponentItemModel[]) => {
   let addedCount = 0
-
+  const failedComponents: string[] = []
+  
+  console.log('=== 开始添加组件 ===')
+  console.log('容器尺寸:', containerInfo.width, '×', containerInfo.height)
+  
   selectedComponents.forEach(comp => {
+    console.log(`尝试添加组件: ${comp.name} (${comp.width}×${comp.height})`)
+    
+    // 提前检查是否可以添加
+    if (!canAddComponent(components.value, comp, containerInfo, gridConfig)) {
+      console.warn(`组件 ${comp.name} 无法添加，会导致布局超出容器`)
+      failedComponents.push(comp.name)
+      return
+    }
+    
     const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
     if (position) {
-       const newComponent: ComponentItemModel = {
+      const newComponent: ComponentItemModel = {
         ...comp,
         id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
         x: position.x,
         y: position.y
       }
       
+      // 确保组件尺寸正确
       autoFillComponent(newComponent, gridConfig)
-
-      components.value.push(newComponent)
-      addedCount++
+      
+      // 临时添加并重新布局
+      const tempComponents = [...components.value, newComponent]
+      const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig)
+      
+      if (layoutSuccess) {
+        components.value.push(newComponent)
+        addedCount++
+        console.log(`✓ 成功添加: ${comp.name} 位置: (${position.x}, ${position.y})`)
+      } else {
+        console.warn(`✗ 布局失败: ${comp.name}`)
+        failedComponents.push(comp.name)
+      }
+    } else {
+      console.warn(`✗ 找不到合适位置: ${comp.name}`)
+      failedComponents.push(comp.name)
     }
   })
-
+  
+  console.log(`添加结果: 成功 ${addedCount} 个, 失败 ${failedComponents.length} 个`)
+  
+  if (failedComponents.length > 0) {
+    alert(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
+  }
+  
   if (addedCount > 0) {
-    console.log(`成功添加 ${addedCount} 个组件`)
-    // 添加后重新组织布局
-    nextTick(() => {
-      reorganizeLayout(components.value, containerInfo, gridConfig)
-    })
+    // 最终重新布局确保所有组件位置正确
+    reorganizeLayout(components.value, containerInfo, gridConfig)
   }
   
-  if (addedCount < selectedComponents.length) {
-    console.warn('部分组件因空间不足未能添加')
-  }
-  
-  addComponentRef.value.close()
+  addComponentRef.value.open()
 }
 
-// 组件调整大小
+// 在容器大小变化时重新布局
+const updateContainerInfo = () => {
+  if (!gridContainer.value) return
+  
+  const container = gridContainer.value
+  const oldWidth = containerInfo.width
+  const oldHeight = containerInfo.height
+  
+  containerInfo.width = container.clientWidth
+  containerInfo.height = container.clientHeight
+  
+  updateCellWidth()
+  
+  // 如果容器尺寸发生变化，重新布局
+  if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
+    console.log('容器尺寸变化，重新布局')
+    reorganizeLayout(components.value, containerInfo, gridConfig)
+  }
+}
+
 const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
   const componentIndex = components.value.findIndex(c => c.id === id)
   if (componentIndex === -1) return
@@ -381,7 +459,7 @@ onUnmounted(() => {
 .grid-container {
   display: flex;
   height: calc(100% - 60px);
-  overflow-y: auto;
+  overflow: hidden;
   padding: 10px;
   background: #fff;
 }
@@ -394,7 +472,7 @@ onUnmounted(() => {
   display: grid;
   // background: white;
   position: relative;
-  overflow: auto;
+  overflow: hidden;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   justify-content: start;
   align-content: start;

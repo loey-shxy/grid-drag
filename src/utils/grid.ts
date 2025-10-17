@@ -71,8 +71,12 @@ export function gridToPixels(gridPos: Position, gridConfig: GridConfig): Positio
 }
 
 // 计算容器需要的高度
-export function calculateContainerHeight(components: ComponentItemModel[], gridConfig: GridConfig): number {
-  if (components.length === 0) return 600 // 默认高度
+export function calculateContainerHeight(
+  components: ComponentItemModel[], 
+  gridConfig: GridConfig,
+  containerHeight: number
+): number {
+  if (components.length === 0) return containerHeight
   
   let maxBottom = 0
   components.forEach(comp => {
@@ -82,8 +86,8 @@ export function calculateContainerHeight(components: ComponentItemModel[], gridC
     }
   })
   
-  // 添加一些边距
-  return Math.max(maxBottom + 100, 600)
+  // 不允许超出容器高度，如果超出则返回容器高度
+  return Math.min(maxBottom + gridConfig.gap, containerHeight)
 }
 
 // 检查位置是否可用
@@ -130,64 +134,74 @@ export function findAvailablePosition(
   gridConfig: GridConfig
 ): Position | null {
   const { width: containerWidth, height: containerHeight } = containerInfo
-  const { cellWidth, cellHeight, gap } = gridConfig
+  const { gap } = gridConfig
 
    // 首先对组件进行自动填充
    autoFillComponent(newComponent, gridConfig)
 
-  // 从左上角开始搜索
-  for (let y = 0; y < containerHeight - newComponent.height; y += cellHeight + gap) {
-    for (let x = 0; x <= containerWidth - newComponent.width; x += cellWidth + gap) {
-      const position = { x, y }
-      // const filledSize = { width: filledWidth, height: filledHeight }
-      
-      if (validatePosition(components, '', position, newComponent, containerInfo, gridConfig)) {
-        return position
-      }
-    }
-  }
-  
-  /// 如果找不到合适位置，尝试调整组件尺寸
-  const minWidth = newComponent.minWidth || 100
-  const minHeight = newComponent.minHeight || 60
-  
-  // 计算最小网格数
-  const minGridWidth = calculateGridWidth(minWidth, cellWidth, gap)
-  const minGridHeight = calculateGridHeight(minHeight, cellHeight, gap)
-  
-  console.log('尝试调整尺寸, 最小网格:', minGridWidth, '×', minGridHeight)
-  
-  // 从最大网格数开始尝试，逐渐减小
-  const maxGridWidth = Math.floor(containerWidth / (cellWidth + gap))
-  const maxGridHeight = Math.floor(containerHeight / (cellHeight + gap))
-
-  for (let gridH = maxGridHeight; gridH >= minGridHeight; gridH--) {
-    for (let gridW = maxGridWidth; gridW >= minGridWidth; gridW--) {
-      const testWidth = calculateFilledWidth(gridW, cellWidth, gap)
-      const testHeight = calculateFilledHeight(gridH, cellHeight, gap)
-      
-      // 检查尺寸是否有效
-      if (testWidth > containerWidth || testHeight > containerHeight) {
-        continue
-      }
-      
-      for (let y = 0; y <= containerHeight - testHeight; y += cellHeight + gap) {
-        for (let x = 0; x <= containerWidth - testWidth; x += cellWidth + gap) {
-          const position = { x, y }
-          const testComponent = { ...newComponent, width: testWidth, height: testHeight }
-          
-          if (validatePosition(components, '', position, testComponent, containerInfo, gridConfig)) {
-            console.log('调整后找到位置:', position, '尺寸:', testWidth, '×', testHeight)
-            newComponent.width = testWidth
-            newComponent.height = testHeight
-            return position
-          }
-        }
-      }
-    }
+    // 如果组件宽度超过容器宽度，无法放置
+  if (newComponent.width > containerWidth) {
+    console.warn('组件宽度超过容器宽度')
+    return null
   }
 
-  return null
+  // 模拟添加组件后的布局，检查是否会导致超出容器高度
+  const testComponents = [...components, { ...newComponent, x: 0, y: 0 }]
+  const layoutSuccess = reorganizeLayout(testComponents, containerInfo, gridConfig)
+
+  if (!layoutSuccess) {
+    console.warn('添加此组件会导致超出容器高度')
+    return null
+  }
+
+  // 查找实际的可用位置（使用流式布局算法）
+  let currentX = 0
+  let currentY = 0
+  let currentRowHeight = 0
+
+   // 先布局现有组件，找到最后的位置
+  for (const comp of components) {
+    if (currentX + comp.width > containerWidth) {
+      currentY += currentRowHeight + gap
+      currentX = 0
+      currentRowHeight = 0
+    }
+    
+    // 记录当前行高
+    currentRowHeight = Math.max(currentRowHeight, comp.height)
+    currentX += comp.width + gap
+  }
+  
+  // 检查当前位置是否能放下新组件
+  if (currentX + newComponent.width > containerWidth) {
+    // 需要换行
+    currentY += currentRowHeight + gap
+    currentX = 0
+    currentRowHeight = newComponent.height
+  } else {
+    // 当前行可以放下
+    currentRowHeight = Math.max(currentRowHeight, newComponent.height)
+  }
+  
+  // 检查是否超出容器高度
+  if (currentY + newComponent.height > containerHeight) {
+    console.warn('位置超出容器高度')
+    return null
+  }
+  
+  return { x: currentX, y: currentY }
+}
+
+
+// 检查是否可以添加组件（提前验证）
+export function canAddComponent(
+  components: ComponentItemModel[],
+  newComponent: ComponentItemModel,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): boolean {
+  const testComponents = [...components, { ...newComponent, x: 0, y: 0 }]
+  return reorganizeLayout(testComponents, containerInfo, gridConfig)
 }
 
 // export const calculateGridPosition = (
@@ -262,44 +276,52 @@ export function reorganizeLayout(
   components: ComponentItemModel[], 
   containerInfo: ContainerInfo, 
   gridConfig: GridConfig
-): void {
-  if (components.length === 0) return
+): boolean {
+  if (components.length === 0) return true
   
   const { gap, cellWidth, cellHeight } = gridConfig
   const containerWidth = containerInfo.width // 减去 padding
+  const containerHeight = containerInfo.height
   
   let currentX = 0
   let currentY = 0
-  let maxHeightInRow = 0
+  const rowHeights: number[] = [] // 记录每行的固定高度
   
   for (const comp of components) {
-     // 计算组件应该占据的网格数并填充
-     const gridWidth = calculateGridWidth(comp.width, cellWidth, gap)
-     const gridHeight = calculateGridHeight(comp.height, cellHeight, gap)
-     
-     const filledWidth = calculateFilledWidth(gridWidth, cellWidth, gap)
-     const filledHeight = calculateFilledHeight(gridHeight, cellHeight, gap)
-     
-     // 更新组件尺寸为填充后的尺寸
-     comp.width = filledWidth
-     comp.height = filledHeight
-
-    // 检查当前行是否能放下组件
-    if (currentX + filledWidth > containerWidth) {
-      // 换行
-      currentY += maxHeightInRow + gap
-      currentX = 0
-      maxHeightInRow = 0
-    }
+     // 自动填充组件尺寸
+    autoFillComponent(comp, gridConfig)
     
+    // 检查当前行是否能放下组件
+    if (currentX + comp.width > containerWidth) {
+      // 换行，新行顶部距离上一行底部固定10px
+      currentY += (rowHeights[rowHeights.length - 1] || 0) + gap
+      currentX = 0
+    }
+
+     // 检查是否超出容器高度
+     if (currentY + comp.height > containerHeight) {
+      console.warn('组件超出容器高度，无法完成布局')
+      return false // 布局失败
+    }
+
     // 更新组件位置
     comp.x = currentX
     comp.y = currentY
     
-    // 更新行信息
-    currentX += filledWidth + gap
-    maxHeightInRow = Math.max(maxHeightInRow, filledHeight)
+    // 如果是当前行的第一个组件，记录行高
+    if (currentX === 0) {
+      rowHeights.push(comp.height)
+    } else {
+      // 更新当前行高为最大组件高度
+      const currentRowIndex = rowHeights.length - 1
+      rowHeights[currentRowIndex] = Math.max(rowHeights[currentRowIndex]!, comp.height)
+    }
+    
+    // 更新行内位置
+    currentX += comp.width + gap
   }
+  
+  return true // 布局成功
 }
 
 // 添加一个专门用于调整单个组件填充的函数
@@ -349,10 +371,48 @@ export function resizeComponentWithAutoFill(
   const filledWidth = calculateFilledWidth(gridWidth, cellWidth, gap)
   const filledHeight = calculateFilledHeight(gridHeight, cellHeight, gap)
   
-  console.log(`自动填充: ${actualWidth}×${actualHeight} -> ${gridWidth}×${gridHeight}网格 -> ${filledWidth}×${filledHeight}px`)
-
   return {
     width: filledWidth,
     height: filledHeight
+  }
+}
+
+// 获取当前布局信息
+export function getLayoutInfo(
+  components: ComponentItemModel[],
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+) {
+  let currentX = 0
+  let currentY = 0
+  let currentRowHeight = 0
+  const rows: number[] = []
+  
+  for (const comp of components) {
+    if (currentX + comp.width > containerInfo.width) {
+      rows.push(currentRowHeight)
+      currentY += currentRowHeight + gridConfig.gap
+      currentX = 0
+      currentRowHeight = 0
+    }
+    
+    currentRowHeight = Math.max(currentRowHeight, comp.height)
+    currentX += comp.width + gridConfig.gap
+  }
+  
+  if (currentRowHeight > 0) {
+    rows.push(currentRowHeight)
+  }
+  
+  const totalHeight = rows.reduce((sum, height, index) => {
+    return sum + height + (index > 0 ? gridConfig.gap : 0)
+  }, 0)
+  
+  return {
+    rows,
+    totalHeight,
+    willOverflow: totalHeight > containerInfo.height,
+    currentPosition: { x: currentX, y: currentY },
+    currentRowHeight
   }
 }

@@ -17,7 +17,7 @@
           class="component-card"
           :class="{
             'selected': isSelected(component),
-            'disabled': !canAddComponent(component)
+            'disabled': !canAddComp(component)
           }"
           @click="onComponentClick(component)"
         >
@@ -38,7 +38,7 @@
             ✓
           </div>
           
-          <div class="disabled-overlay" v-if="!canAddComponent(component)">
+          <div class="disabled-overlay" v-if="!canAddComp(component)">
             空间不足
           </div>
         </div>
@@ -51,8 +51,9 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, inject, onMounted, useId } from 'vue'
-import type { ComponentItemModel, GridConfig } from '../types/layout'
+import { ref, computed, inject, useId } from 'vue'
+import type { ComponentItemModel } from '../types/layout'
+import { canAddComponent } from '../utils/grid'
 
 interface Props {
   selectedComponents: ComponentItemModel[]
@@ -86,9 +87,9 @@ const componentLibrary = ref<ComponentItemModel[]>([
     type: 'chart-bar',
     name: '柱状图',
     width: 350,   // 像素
-    height: 280,  // 像素
-    minWidth: 180,
-    minHeight: 180,
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -98,8 +99,8 @@ const componentLibrary = ref<ComponentItemModel[]>([
     name: '饼图',
     width: 300,   // 像素
     height: 300,  // 像素
-    minWidth: 150,
-    minHeight: 150,
+    minWidth: 200,
+    minHeight: 20,
     id: useId(),
     x: 0,
     y: 0
@@ -108,8 +109,8 @@ const componentLibrary = ref<ComponentItemModel[]>([
     type: 'table',
     name: '数据表格',
     width: 600,   // 像素
-    height: 400,  // 像素
-    minWidth: 300,
+    height: 300,  // 像素
+    minWidth: 200,
     minHeight: 200,
     id: useId(),
     x: 0,
@@ -118,10 +119,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'card',
     name: '数据卡片',
-    width: 280,   // 像素
-    height: 200,  // 像素
-    minWidth: 120,
-    minHeight: 100,
+    width: 300,   // 像素
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 20,
     id: useId(),
     x: 0,
     y: 0
@@ -129,10 +130,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'metric',
     name: '指标卡',
-    width: 240,   // 像素
-    height: 120,  // 像素
-    minWidth: 120,
-    minHeight: 80,
+    width: 300,   // 像素
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -141,9 +142,9 @@ const componentLibrary = ref<ComponentItemModel[]>([
     type: 'text',
     name: '文本组件',
     width: 320,   // 像素
-    height: 200,  // 像素
-    minWidth: 160,
-    minHeight: 100,
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -154,7 +155,7 @@ const componentLibrary = ref<ComponentItemModel[]>([
     width: 400,   // 像素
     height: 300,  // 像素
     minWidth: 200,
-    minHeight: 150,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -163,9 +164,9 @@ const componentLibrary = ref<ComponentItemModel[]>([
     type: 'progress',
     name: '进度条',
     width: 360,   // 像素
-    height: 100,  // 像素
+    height: 300,  // 像素
     minWidth: 200,
-    minHeight: 60,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -196,21 +197,17 @@ const isSelected = (component: ComponentItemModel) => {
 }
 
 // 检查是否可以添加组件（空间是否足够）
-const canAddComponent = (component: ComponentItemModel) => {
+const canAddComp = (component: ComponentItemModel) => {
   if (!layoutContainer?.value) return true
   
   const containerInfo = layoutContainer.value.containerInfo
   const components = layoutContainer.value.components
+  const gridConfig = layoutContainer.value.gridConfig
   
-  if (!containerInfo || !components) return true
+  if (!containerInfo || !components || !gridConfig) return true
   
-  // 简单的空间检查：如果组件宽度超过容器宽度，则不能添加
-  if (component.width > containerInfo.width) {
-    return false
-  }
-  
-  // 可以添加更复杂的空间检查逻辑
-  return true
+  // 使用工具函数检查
+  return canAddComponent(components, component, containerInfo, gridConfig)
 }
 
 // 获取组件预览样式
@@ -272,7 +269,7 @@ const getComponentColor = (type: string) => {
 }
 
 const onComponentClick = (component: ComponentItemModel) => {
-  if (!canAddComponent(component)) {
+  if (!canAddComp(component)) {
     return
   }
 
