@@ -74,10 +74,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'chart-line',
     name: '折线图',
-    width: 4,
-    height: 3,
-    minWidth: 2,
-    minHeight: 2,
+    width: 400,   // 像素
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -85,10 +85,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'chart-bar',
     name: '柱状图',
-    width: 3,
-    height: 3,
-    minWidth: 2,
-    minHeight: 2,
+    width: 350,   // 像素
+    height: 280,  // 像素
+    minWidth: 180,
+    minHeight: 180,
     id: useId(),
     x: 0,
     y: 0
@@ -96,10 +96,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'chart-pie',
     name: '饼图',
-    width: 2,
-    height: 2,
-    minWidth: 2,
-    minHeight: 2,
+    width: 300,   // 像素
+    height: 300,  // 像素
+    minWidth: 150,
+    minHeight: 150,
     id: useId(),
     x: 0,
     y: 0
@@ -107,10 +107,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'table',
     name: '数据表格',
-    width: 6,
-    height: 4,
-    minWidth: 3,
-    minHeight: 2,
+    width: 600,   // 像素
+    height: 400,  // 像素
+    minWidth: 300,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -118,10 +118,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'card',
     name: '数据卡片',
-    width: 2,
-    height: 2,
-    minWidth: 1,
-    minHeight: 1,
+    width: 280,   // 像素
+    height: 200,  // 像素
+    minWidth: 120,
+    minHeight: 100,
     id: useId(),
     x: 0,
     y: 0
@@ -129,10 +129,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'metric',
     name: '指标卡',
-    width: 2,
-    height: 1,
-    minWidth: 1,
-    minHeight: 1,
+    width: 240,   // 像素
+    height: 120,  // 像素
+    minWidth: 120,
+    minHeight: 80,
     id: useId(),
     x: 0,
     y: 0
@@ -140,10 +140,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'text',
     name: '文本组件',
-    width: 3,
-    height: 2,
-    minWidth: 1,
-    minHeight: 1,
+    width: 320,   // 像素
+    height: 200,  // 像素
+    minWidth: 160,
+    minHeight: 100,
     id: useId(),
     x: 0,
     y: 0
@@ -151,10 +151,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'image',
     name: '图片组件',
-    width: 4,
-    height: 3,
-    minWidth: 2,
-    minHeight: 2,
+    width: 400,   // 像素
+    height: 300,  // 像素
+    minWidth: 200,
+    minHeight: 150,
     id: useId(),
     x: 0,
     y: 0
@@ -162,10 +162,10 @@ const componentLibrary = ref<ComponentItemModel[]>([
   {
     type: 'progress',
     name: '进度条',
-    width: 2,
-    height: 1,
-    minWidth: 2,
-    minHeight: 1,
+    width: 360,   // 像素
+    height: 100,  // 像素
+    minWidth: 200,
+    minHeight: 60,
     id: useId(),
     x: 0,
     y: 0
@@ -183,14 +183,15 @@ const filteredComponents = computed(() => {
   const query = searchQuery.value.toLowerCase()
   return componentLibrary.value.filter(component =>
     component.name.toLowerCase().includes(query) ||
-    component.type.toLowerCase().includes(query)
+    component.type.toLowerCase().includes(query) || 
+    getComponentTypeText(component.type).toLowerCase().includes(query)
   )
 })
 
 // 检查组件是否被选中
 const isSelected = (component: ComponentItemModel) => {
   return props.selectedComponents.some(
-    selected => selected.id === component.id
+    selected => selected.type === component.type
   )
 }
 
@@ -198,17 +199,43 @@ const isSelected = (component: ComponentItemModel) => {
 const canAddComponent = (component: ComponentItemModel) => {
   if (!layoutContainer?.value) return true
   
-  // 这里需要实现空间检查逻辑
-  // 暂时返回 true，实际项目中需要根据剩余空间判断
+  const containerInfo = layoutContainer.value.containerInfo
+  const components = layoutContainer.value.components
+  
+  if (!containerInfo || !components) return true
+  
+  // 简单的空间检查：如果组件宽度超过容器宽度，则不能添加
+  if (component.width > containerInfo.width) {
+    return false
+  }
+  
+  // 可以添加更复杂的空间检查逻辑
   return true
 }
 
 // 获取组件预览样式
 const getPreviewStyle = (component: ComponentItemModel) => {
+  // 计算预览的宽高比例，保持视觉一致性
+  const maxPreviewSize = 120
   const aspectRatio = component.width / component.height
+  
+  let previewWidth, previewHeight
+  
+  if (aspectRatio > 1) {
+    // 宽大于高
+    previewWidth = Math.min(maxPreviewSize, component.width / 3)
+    previewHeight = previewWidth / aspectRatio
+  } else {
+    // 高大于宽或正方形
+    previewHeight = Math.min(maxPreviewSize, component.height / 3)
+    previewWidth = previewHeight * aspectRatio
+  }
+  
   return {
-    aspectRatio: `${aspectRatio}`,
-    backgroundColor: getComponentColor(component.type)
+    width: `${previewWidth}px`,
+    height: `${previewHeight}px`,
+    backgroundColor: getComponentColor(component.type),
+    aspectRatio: `${aspectRatio}`
   }
 }
 
@@ -248,17 +275,57 @@ const onComponentClick = (component: ComponentItemModel) => {
   if (!canAddComponent(component)) {
     return
   }
-  emit('select', { ...component })
-}
 
-// 初始化时给组件添加 id
-onMounted(() => {
-  componentLibrary.value = componentLibrary.value.map(comp => ({
-    ...comp,
-    id: comp.type, // 临时 id，实际添加时会重新生成
+    // 创建组件副本，确保每次添加都是新的实例
+    const componentCopy: ComponentItemModel = {
+    ...component,
+    id: `${component.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     x: 0,
     y: 0
-  }))
+  }
+
+  emit('select', { ...componentCopy })
+}
+
+// 获取组件类型描述
+const getComponentTypeText = (type: string) => {
+  const types: { [key: string]: string } = {
+    'chart-line': '图表',
+    'chart-bar': '图表',
+    'chart-pie': '图表',
+    'table': '表格',
+    'card': '卡片',
+    'metric': '指标',
+    'text': '文本',
+    'image': '媒体',
+    'progress': '进度',
+    'gauge': '图表',
+    'statistic': '统计',
+    'calendar': '日历'
+  }
+  return types[type] || '组件'
+}
+
+// 组件尺寸分类
+const componentSizes = computed(() => {
+  const sizes = {
+    small: 0,
+    medium: 0,
+    large: 0
+  }
+  
+  componentLibrary.value.forEach(comp => {
+    const area = comp.width * comp.height
+    if (area < 50000) { // 小于 50000 像素为小组件
+      sizes.small++
+    } else if (area < 150000) { // 50000-150000 像素为中等组件
+      sizes.medium++
+    } else { // 大于 150000 像素为大组件
+      sizes.large++
+    }
+  })
+  
+  return sizes
 })
 </script>
 
