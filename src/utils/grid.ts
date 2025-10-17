@@ -63,11 +63,12 @@ export const validatePosition = (
   // 检查与其他组件的重叠
   for (const comp of components) {
     if (comp.id === currentId) continue
-
-    if (position.x < comp.x + comp.width 
-      && position.x + size.width > comp.x 
-      && position.y < comp.y + comp.height 
-      && position.y + size.height > comp.y) {
+    
+    // 计算重叠区域
+    const overlapX = position.x < comp.x + comp.width && position.x + size.width > comp.x
+    const overlapY = position.y < comp.y + comp.height && position.y + size.height > comp.y
+    
+    if (overlapX && overlapY) {
       return false
     }
   }
@@ -82,11 +83,11 @@ export function findAvailablePosition(
   containerInfo: ContainerInfo,
   gridConfig: GridConfig
 ): Position | null {
-  const { width: containerWidth } = containerInfo
+  const { width: containerWidth, height: containerHeight } = containerInfo
   const { cellWidth, cellHeight, gap } = gridConfig
 
     // 从左上角开始搜索
-    for (let y = 0; y < containerInfo.height; y += cellHeight + gap) {
+    for (let y = 0; y < containerHeight - newComponent.height; y += cellHeight + gap) {
       for (let x = 0; x <= containerWidth - newComponent.width; x += cellWidth + gap) {
         const position = { x, y }
         
@@ -97,7 +98,7 @@ export function findAvailablePosition(
     }
   
     // 如果找不到，尝试紧凑搜索
-  for (let y = 0; y < containerInfo.height; y += 10) {
+  for (let y = 0; y < containerHeight - newComponent.height; y += 10) {
     for (let x = 0; x <= containerWidth - newComponent.width; x += 10) {
       const position = { x, y }
       
@@ -176,6 +177,7 @@ export function canPlaceComponent(
     gridConfig
   )
 }
+
 // 重新组织布局（基于像素的流式布局）
 export function reorganizeLayout(
   components: ComponentItemModel[], 
@@ -184,24 +186,20 @@ export function reorganizeLayout(
 ): void {
   if (components.length === 0) return
   
-  const sortedComponents = [...components].sort((a, b) => {
-    if (a.y !== b.y) return a.y - b.y
-    return a.x - b.x
-  })
   
-  const { cellWidth, gap } = gridConfig
-  const containerWidth = containerInfo.width - gap * 2 // 减去 padding
+  const { gap } = gridConfig
+  const containerWidth = containerInfo.width // 减去 padding
   
-  let currentX = gap
-  let currentY = gap
+  let currentX = 0
+  let currentY = 0
   let maxHeightInRow = 0
   
-  for (const comp of sortedComponents) {
+  for (const comp of components) {
     // 检查当前行是否能放下组件
     if (currentX + comp.width > containerWidth) {
       // 换行
       currentY += maxHeightInRow + gap
-      currentX = gap
+      currentX = 0
       maxHeightInRow = 0
     }
     

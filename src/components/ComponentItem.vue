@@ -31,7 +31,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
-import { pixelsToGrid } from '../utils/grid';
 
 interface Props {
   component: ComponentItemModel
@@ -49,26 +48,23 @@ const emit = defineEmits<{
 const isDragging = ref(false)
 const isResizing = ref(false)
 
-// 计算组件在网格中的位置和跨度
-const gridPosition = computed(() => {
-  return pixelsToGrid({ x: props.component.x, y: props.component.y }, props.gridConfig)
-})
-
-const gridSize = computed(() => {
-  return {
-    width: Math.ceil(props.component.width / props.gridConfig.cellWidth),
-    height: Math.ceil(props.component.height / props.gridConfig.cellHeight)
-  }
-})
-
 // 计算组件样式
 const componentStyle = computed(() => {
-  const pos = gridPosition.value
-  const size = gridSize.value
+  // const pos = gridPosition.value
+  // const size = gridSize.value
   
+  // return {
+  //   gridColumn: `${pos.x + 1} / span ${size.width}`,
+  //   gridRow: `${pos.y + 1} / span ${size.height}`,
+  //   transform: isDragging.value ? 'scale(1.02)' : 'none',
+  //   zIndex: isDragging.value || isResizing.value ? 100 : 1
+  // }
   return {
-    gridColumn: `${pos.x + 1} / span ${size.width}`,
-    gridRow: `${pos.y + 1} / span ${size.height}`,
+    position: 'absolute',
+    left: `${props.component.x}px`,
+    top: `${props.component.y}px`,
+    width: `${props.component.width}px`,
+    height: `${props.component.height}px`,
     transform: isDragging.value ? 'scale(1.02)' : 'none',
     zIndex: isDragging.value || isResizing.value ? 100 : 1
   }
@@ -116,6 +112,10 @@ const onDragStart = (e: DragEvent) => {
 
   e.dataTransfer?.setData('text/plain', props.component.id);
   e.dataTransfer!.effectAllowed = 'move'
+
+  // 设置拖拽预览
+  const dragImage = e.currentTarget as HTMLElement
+  e.dataTransfer?.setDragImage(dragImage, 0, 0)
 }
 
 const onDragEnd = () => {
@@ -134,11 +134,16 @@ const onResizeStart = (position: string, e: MouseEvent) => {
   const startXPos = props.component.x
   const startYPos = props.component.y
   
-  const { cellWidth, cellHeight, gap } = props.gridConfig
   const containerWidth = props.containerInfo.width
   const containerHeight = props.containerInfo.height
 
   const onMouseMove = (moveEvent: MouseEvent) => {
+    if (moveEvent.buttons === 0) {
+      // 鼠标按钮释放，结束调整
+      onMouseUp()
+      return
+    }
+
     const deltaX = moveEvent.clientX - startX
     const deltaY = moveEvent.clientY - startY
     

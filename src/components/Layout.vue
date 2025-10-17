@@ -15,6 +15,7 @@
       :style="gridStyle"
       @dragover="onDragOver"
       @drop="onDrop"
+      @scroll="onScroll"
     >
       <!-- 网格背景 -->
       <div 
@@ -180,6 +181,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
         y: position.y
       }
       
+      console.log('newComponent', newComponent)
       components.value.push(newComponent)
       addedCount++
     }
