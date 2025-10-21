@@ -63,6 +63,7 @@ import {
   canAddComponent,
   autoFillComponent,
   resizeComponentWithAutoFill,
+  validatePositionWithLayout,
 } from '../utils/grid';
 
 const gridConfig = reactive<GridConfig>({
@@ -288,19 +289,78 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
     y: newData.y !== undefined ? newData.y : component!.y
   }
   
-    
   // 应用自动填充
   const filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
   
+    // 使用智能验证（考虑动态布局）
+  const validationResult = validatePositionWithLayout(
+    components.value,
+    id,
+    newPosition,
+    filledSize,
+    containerInfo,
+    gridConfig
+  )
+
   // 验证新位置和尺寸
-  if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {// 直接更新组件属性
+  // if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {// 直接更新组件属性
+  //   component.x = newPosition.x
+  //   component.y = newPosition.y
+  //   component.width = newSize.width
+  //   component.height = newSize.height
+  //   reorganizeLayout(components.value, containerInfo, gridConfig)
+  // }
+
+  if (validationResult.valid) {
     component.x = newPosition.x
     component.y = newPosition.y
-    component.width = newSize.width
-    component.height = newSize.height
+    component.width = filledSize.width
+    component.height = filledSize.height
 
-    // Object.assign(component, newPosition, filledSize)
+    // 更新受影响的组件
+    if (validationResult.affectedComponents.length > 0) {
+      console.log(`需要更新 ${validationResult.affectedComponents.length} 个受影响组件`)
+      validationResult.affectedComponents.forEach(affectedComp => {
+        const targetComp = components.value.find(c => c.id === affectedComp.id)
+        if (targetComp) {
+          console.log(`更新受影响组件 ${targetComp.name}: 位置(${affectedComp.x}, ${affectedComp.y})`)
+          targetComp.x = affectedComp.x
+          targetComp.y = affectedComp.y
+        }
+      })
+    }
+
+    // 最终重新布局确保一切正确
     reorganizeLayout(components.value, containerInfo, gridConfig)
+  } else {
+     // 可以尝试只调整尺寸不调整位置
+    const fallbackResult = validatePositionWithLayout(
+      components.value,
+      id,
+      { x: component.x, y: component.y }, // 保持原位置
+      newSize, // 只调整尺寸
+      containerInfo,
+      gridConfig
+    )
+
+    if (fallbackResult.valid) {
+      console.log('✓ 回退方案：只调整尺寸，位置保持不变')
+      component.width = newSize.width
+      component.height = newSize.height
+      
+      // 更新受影响的组件
+      if (fallbackResult.affectedComponents.length > 0) {
+        fallbackResult.affectedComponents.forEach(affectedComp => {
+          const targetComp = components.value.find(c => c.id === affectedComp.id)
+          if (targetComp) {
+            targetComp.x = affectedComp.x
+            targetComp.y = affectedComp.y
+          }
+        })
+      }
+      
+      reorganizeLayout(components.value, containerInfo, gridConfig)
+    }
   }
 }
 

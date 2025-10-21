@@ -416,3 +416,79 @@ export function getLayoutInfo(
     currentRowHeight
   }
 }
+
+// 检查调整大小是否会影响其他组件，并返回需要更新的组件
+export function getAffectedComponents(
+  components: ComponentItemModel[],
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): { affected: ComponentItemModel[]; canResize: boolean } {
+  const affected: ComponentItemModel[] = []
+  let canResize = true
+  
+  // 创建临时组件列表，用于模拟调整后的状态
+  const tempComponents = components.map(comp => 
+    comp.id === resizingComponent.id 
+      ? { ...comp, ...newPosition, ...newSize }
+      : { ...comp }
+  )
+  
+  // 重新布局临时组件
+  const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig)
+  
+  if (!layoutSuccess) {
+    return { affected: [], canResize: false }
+  }
+  
+  // 找出位置发生变化的组件
+  components.forEach(comp => {
+    if (comp.id !== resizingComponent.id) {
+      const tempComp = tempComponents.find(tc => tc.id === comp.id)
+      if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
+        affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
+      }
+    }
+  })
+  
+  return { affected, canResize: true }
+}
+
+// 智能验证位置（考虑动态布局）
+export function validatePositionWithLayout(
+  components: ComponentItemModel[],
+  currentId: string,
+  position: Position,
+  size: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): { valid: boolean; affectedComponents: ComponentItemModel[] } {
+  const { width: containerWidth, height: containerHeight } = containerInfo
+  
+  // 基础边界检查
+  if (position.x < 0 || 
+      position.y < 0 ||
+      position.x + size.width > containerWidth ||
+      position.y + size.height > containerHeight) {
+    return { valid: false, affectedComponents: [] }
+  }
+  
+  // 获取受影响的组件
+  const currentComponent = components.find(c => c.id === currentId)
+  if (!currentComponent) {
+    return { valid: false, affectedComponents: [] }
+  }
+  
+  const { affected, canResize } = getAffectedComponents(
+    components,
+    currentComponent,
+    position,
+    size,
+    containerInfo,
+    gridConfig
+  )
+  
+  return { valid: canResize, affectedComponents: affected }
+}

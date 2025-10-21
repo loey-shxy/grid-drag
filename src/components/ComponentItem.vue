@@ -148,10 +148,6 @@ const onResizeStart = (position: string, e: MouseEvent) => {
     switch (position) {
       case 'right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
-        // 右边界检查
-        // if (newX + newWidth > containerWidth) {
-        //   newWidth = containerWidth - newX
-        // }
         break
         
       case 'left':
@@ -161,10 +157,6 @@ const onResizeStart = (position: string, e: MouseEvent) => {
         
       case 'bottom':
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
-        // 下边界检查
-        // if (newY + newHeight > containerHeight) {
-        //   newHeight = containerHeight - newY
-        // }
         break
         
       case 'top':
@@ -176,10 +168,6 @@ const onResizeStart = (position: string, e: MouseEvent) => {
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         newY = Math.max(0, startYPos + deltaY)
-        // 边界检查
-        // if (newX + newWidth > containerWidth) {
-        //   newWidth = containerWidth - newX
-        // }
         break
         
       case 'top-left':
@@ -193,22 +181,11 @@ const onResizeStart = (position: string, e: MouseEvent) => {
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         newX = Math.max(0, startXPos + deltaX)
-        // 边界检查
-        // if (newY + newHeight > containerHeight) {
-        //   newHeight = containerHeight - newY
-        // }
         break
         
       case 'bottom-right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
-        // 边界检查
-        // if (newX + newWidth > containerWidth) {
-        //   newWidth = containerWidth - newX
-        // }
-        // if (newY + newHeight > containerHeight) {
-        //   newHeight = containerHeight - newY
-        // }
         break
     }
 
@@ -239,6 +216,7 @@ const onResizeStart = (position: string, e: MouseEvent) => {
       filledSize.height = containerHeight - newY
     }
 
+    // 确保最终尺寸不小于最小值
     filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
     filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
 
