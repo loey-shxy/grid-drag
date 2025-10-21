@@ -1,6 +1,7 @@
 <template>
   <div
     class="component-item"
+    :class="{ resizing: isResizing }"
     :style="componentStyle"
     draggable="true"
     @dragstart="onDragStart"
@@ -15,16 +16,19 @@
         {{ getComponentDescription(component.type) }}
       </div>
     </div>
+    <icon-delete :size="16" class="remove-btn" @click="$emit('remove', component.id)" />
     
     <!-- 调整手柄 -->
-    <div
-      v-for="handle in enabledResizeHandles"
-      :key="handle.position"
-      class="resize-handle"
-      :class="`handle-${handle.position}`"
-      @mousedown="onResizeStart(handle.position, $event)"
-    />
-    <icon-delete :size="16" class="remove-btn" @click="$emit('remove', component.id)" />
+    <div class="resize-overlay">
+      <div class="edge top" @mousedown="onEdgeMouseDown('top', $event)"></div>
+      <div class="edge right" @mousedown="onEdgeMouseDown('right', $event)"></div>
+      <div class="edge bottom" @mousedown="onEdgeMouseDown('bottom', $event)"></div>
+      <div class="edge left" @mousedown="onEdgeMouseDown('left', $event)"></div>
+      <div class="corner top-left" @mousedown="onCornerMouseDown('top-left', $event)"></div>
+      <div class="corner top-right" @mousedown="onCornerMouseDown('top-right', $event)"></div>
+      <div class="corner bottom-left" @mousedown="onCornerMouseDown('bottom-left', $event)"></div>
+      <div class="corner bottom-right" @mousedown="onCornerMouseDown('bottom-right', $event)"></div>
+    </div>
   </div>
 </template>
 
@@ -48,9 +52,10 @@ const emit = defineEmits<{
 
 const isDragging = ref(false)
 const isResizing = ref(false)
+const currentResizeType = ref<string>('') // 'edge' or 'corner' + direction
 
 // 计算组件样式
-const componentStyle = computed(() => {
+const componentStyle = computed((): any => {
   return {
     position: 'absolute',
     left: `${props.component.x}px`,
@@ -58,46 +63,41 @@ const componentStyle = computed(() => {
     width: `${props.component.width}px`,
     height: `${props.component.height}px`,
     transform: isDragging.value ? 'scale(1.02)' : 'none',
-    zIndex: isDragging.value || isResizing.value ? 100 : 1
+    zIndex: isDragging.value || isResizing.value ? 100 : 1,
+    cursor: isResizing.value ? getResizeCursor(currentResizeType.value) : 'move'
   }
 })
 
-const resizeHandles = [
-  { position: 'top-left' }, { position: 'top-right' },
-  { position: 'bottom-left' }, { position: 'bottom-right' },
-  { position: 'top' }, { position: 'right' },
-  { position: 'bottom' }, { position: 'left' }
-]
+// 获取调整时的光标样式
+const getResizeCursor = (type: string) => {
+  const cursorMap: { [key: string]: string } = {
+    'top': 'n-resize',
+    'right': 'e-resize',
+    'bottom': 's-resize',
+    'left': 'w-resize',
+    'top-left': 'nw-resize',
+    'top-right': 'ne-resize',
+    'bottom-left': 'sw-resize',
+    'bottom-right': 'se-resize'
+  }
+  return cursorMap[type] || 'move'
+}
 
-// 计算可用的调整手柄（基于像素边界）
-const enabledResizeHandles = computed(() => {
-  const { x, y, width, height } = props.component
-  const containerWidth = props.containerInfo.width
-  const containerHeight = props.containerInfo.height
+// 边缘拖拽调整
+const onEdgeMouseDown = (edge: string, e: MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
   
-  return resizeHandles.filter(handle => {
-    switch (handle.position) {
-      case 'left':
-        return x > 0
-      case 'right':
-        return x + width < containerWidth
-      case 'top':
-        return y > 0
-      case 'bottom':
-        return y + height < containerHeight
-      case 'top-left':
-        return x > 0 && y > 0
-      case 'top-right':
-        return x + width < containerWidth && y > 0
-      case 'bottom-left':
-        return x > 0 && y + height < containerHeight
-      case 'bottom-right':
-        return x + width < containerWidth && y + height < containerHeight
-      default:
-        return true
-    }
-  })
-})
+  onResizeStart(edge, e)
+}
+
+// 角落拖拽调整
+const onCornerMouseDown = (corner: string, e: MouseEvent) => {
+  e.preventDefault()
+  e.stopPropagation()
+  
+  onResizeStart(corner, e)
+}
 
 const onDragStart = (e: DragEvent) => {
   isDragging.value = true;
@@ -115,7 +115,7 @@ const onDragEnd = () => {
 }
 
 // 调整大小（像素计算）
-const onResizeStart = (position: string, e: MouseEvent) => {
+const onResizeStart = (type: string, e: MouseEvent) => {
   e.preventDefault()
   e.stopPropagation()
   
@@ -128,6 +128,9 @@ const onResizeStart = (position: string, e: MouseEvent) => {
   
   const containerWidth = props.containerInfo.width
   const containerHeight = props.containerInfo.height
+
+  currentResizeType.value = type
+  isResizing.value = true
 
   const onMouseMove = (moveEvent: MouseEvent) => {
     if (moveEvent.buttons === 0) {
@@ -145,7 +148,7 @@ const onResizeStart = (position: string, e: MouseEvent) => {
     let newY = startYPos
     
     // 根据手柄位置计算新的像素尺寸
-    switch (position) {
+    switch (type) {
       case 'right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         break
@@ -233,12 +236,14 @@ const onResizeStart = (position: string, e: MouseEvent) => {
     document.removeEventListener('mouseup', onMouseUp)
     document.removeEventListener('mouseleave', onMouseUp) // 添加鼠标离开监听
     isResizing.value = false
+    currentResizeType.value = ''
   }
   
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   document.addEventListener('mouseleave', onMouseUp) // 鼠标离开窗口时也结束
   isResizing.value = true
+  currentResizeType.value = ''
 }
 
 // 获取组件描述
@@ -337,84 +342,101 @@ const getComponentDescription = (type: string) => {
   }
 }
 
-.resize-handle {
+.resize-overlay {
   position: absolute;
-  width: 10px;
-  height: 10px;
-  background: #007bff;
-  border: 2px solid white;
-  border-radius: 50%;
-  z-index: 10;
-  opacity: 0;
-  transition: opacity 0.2s;
-  
-  // 角部手柄
-  &.handle-top-left {
-    top: -5px;
-    left: -5px;
-    cursor: nw-resize;
-  }
-  
-  &.handle-top-right {
-    top: -5px;
-    right: -5px;
-    cursor: ne-resize;
-  }
-  
-  &.handle-bottom-left {
-    bottom: -5px;
-    left: -5px;
-    cursor: sw-resize;
-  }
-  
-  &.handle-bottom-right {
-    bottom: -5px;
-    right: -5px;
-    cursor: se-resize;
-  }
-  
-  // 边缘手柄
-  &.handle-top {
-    top: -5px;
-    left: 50%;
-    transform: translateX(-50%);
-    cursor: n-resize;
-  }
-  
-  &.handle-bottom {
-    bottom: -5px;
-    left: 50%;
-    transform: translateX(-50%);
-    cursor: s-resize;
-  }
-  
-  &.handle-left {
-    left: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    cursor: w-resize;
-  }
-  
-  &.handle-right {
-    right: -5px;
-    top: 50%;
-    transform: translateY(-50%);
-    cursor: e-resize;
-  }
-  
-  // 禁用状态
-  &:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-  }
-  
-  &:hover {
-    background: #0056b3;
-  }
+  top: -6px;
+  left: -6px;
+  right: -6px;
+  bottom: -6px;
+  pointer-events: none;
 }
 
-.component-item:hover .remove-btn,
-.component-item:hover .resize-handle {
+.component-item:hover .resize-overlay {
+  pointer-events: auto;
+}
+
+
+.edge {
+  position: absolute;
+  background: transparent;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.edge:hover {
+  opacity: 1;
+}
+
+.edge.top {
+  top: 0;
+  left: 6px;
+  right: 6px;
+  height: 6px;
+  cursor: n-resize;
+}
+
+.edge.right {
+  top: 6px;
+  right: 0;
+  bottom: 6px;
+  width: 6px;
+  cursor: e-resize;
+}
+
+.edge.bottom {
+  bottom: 0;
+  left: 6px;
+  right: 6px;
+  height: 6px;
+  cursor: s-resize;
+}
+
+.edge.left {
+  top: 6px;
+  left: 0;
+  bottom: 6px;
+  width: 6px;
+  cursor: w-resize;
+}
+
+.corner {
+  position: absolute;
+  background: transparent;
+  width: 12px;
+  height: 12px;
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.corner:hover {
+  opacity: 1;
+}
+
+.corner.top-left {
+  top: 0;
+  left: 0;
+  cursor: nw-resize;
+}
+
+.corner.top-right {
+  top: 0;
+  right: 0;
+  cursor: ne-resize;
+}
+
+.corner.bottom-left {
+  bottom: 0;
+  left: 0;
+  cursor: sw-resize;
+}
+
+.corner.bottom-right {
+  bottom: 0;
+  right: 0;
+  cursor: se-resize;
+}
+
+.component-item:hover .remove-btn {
   opacity: 1;
 }
 
