@@ -302,28 +302,6 @@ const getComponentTypeText = (type: string) => {
   }
   return types[type] || '组件'
 }
-
-// 组件尺寸分类
-const componentSizes = computed(() => {
-  const sizes = {
-    small: 0,
-    medium: 0,
-    large: 0
-  }
-  
-  componentLibrary.value.forEach(comp => {
-    const area = comp.width * comp.height
-    if (area < 50000) { // 小于 50000 像素为小组件
-      sizes.small++
-    } else if (area < 150000) { // 50000-150000 像素为中等组件
-      sizes.medium++
-    } else { // 大于 150000 像素为大组件
-      sizes.large++
-    }
-  })
-  
-  return sizes
-})
 </script>
 
 <style scoped>

@@ -184,11 +184,22 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         newX = Math.max(0, startXPos + deltaX)
+
+         // 允许调整到容器底部
+        if (newY + newHeight > containerHeight) {
+          newHeight = containerHeight - newY
+        }
+
         break
         
       case 'bottom-right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+
+         // 允许调整到容器底部
+        if (newY + newHeight > containerHeight) {
+          newHeight = containerHeight - newY
+        }
         break
     }
 
@@ -196,36 +207,49 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     if (newX + newWidth > containerWidth) {
       newWidth = containerWidth - newX
     }
-    if (newY + newHeight > containerHeight) {
-      newHeight = containerHeight - newY
+     // 边界检查 - 高度（顶部调整已经在switch中处理）
+    if (type !== 'top' && type !== 'top-left' && type !== 'top-right') {
+      if (newY + newHeight > containerHeight) {
+        newHeight = containerHeight - newY
+      }
     }
-    
-    // 确保最小尺寸
+
+     // 确保最小尺寸
     newWidth = Math.max(props.component.minWidth || 100, newWidth)
     newHeight = Math.max(props.component.minHeight || 60, newHeight)
     
-    // 应用自动填充
+    console.log(`调整后原始尺寸: ${newWidth.toFixed(1)}×${newHeight.toFixed(1)}`)
+    
+    // 应用自动填充（只对宽度）
     const filledSize = resizeComponentWithAutoFill(
       props.component, 
       { width: newWidth, height: newHeight }, 
       props.gridConfig
     )
     
-    // 边界检查（填充后）
+    // 边界检查（填充后）- 只检查宽度
     if (newX + filledSize.width > containerWidth) {
       filledSize.width = containerWidth - newX
+      console.log(`填充后右边界限制: 宽度调整为 ${filledSize.width.toFixed(1)}`)
     }
+    
+    // 高度边界检查（填充不会改变高度，所以使用原始高度）
     if (newY + filledSize.height > containerHeight) {
       filledSize.height = containerHeight - newY
+      console.log(`高度边界限制: 高度调整为 ${filledSize.height.toFixed(1)}`)
     }
 
-    // 确保最终尺寸不小于最小值
+     // 确保最终尺寸不小于最小值
     filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
     filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
-
+    
+    console.log(`最终尺寸: ${filledSize.width.toFixed(1)}×${filledSize.height.toFixed(1)}`)
+    console.log(`最终位置: (${newX.toFixed(1)}, ${newY.toFixed(1)})`)
+    
+    // 发射 resize 事件
     emit('resize', props.component.id, {
-      width: parseFloat(filledSize.width.toFixed(2)),
-      height: parseFloat(filledSize.height.toFixed(2)),
+      width: Math.round(filledSize.width),
+      height: Math.round(filledSize.height),
       x: Math.round(newX),
       y: Math.round(newY)
     })

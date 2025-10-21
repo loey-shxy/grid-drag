@@ -17,77 +17,10 @@ function calculateGridWidth(pixelWidth: number, cellWidth: number, gap: number):
   return Math.max(1, gridCount)
 }
 
-// 计算组件应该占据的网格高度
-function calculateGridHeight(pixelHeight: number, cellHeight: number, gap: number): number {
-  if (pixelHeight <= 0) return 1
-  
-  const unitHeight = cellHeight + gap
-  // 计算需要多少个完整的网格单元
-  let gridCount = Math.floor(pixelHeight / unitHeight)
-  
-  // 如果剩余空间大于0，需要额外一个网格
-  const remainder = pixelHeight % unitHeight
-  if (remainder > 0) {
-    gridCount += 1
-  }
-  
-  return Math.max(1, gridCount)
-}
-
 // 计算填充后的像素宽度
 function calculateFilledWidth(gridWidth: number, cellWidth: number, gap: number): number {
   const filledWidth = gridWidth * cellWidth + (gridWidth - 1) * gap
   return parseFloat(filledWidth.toFixed(2)) // 保留2位小数
-}
-
-// 计算填充后的像素高度
-function calculateFilledHeight(gridHeight: number, cellHeight: number, gap: number): number {
-  const filledHeight = gridHeight * cellHeight + (gridHeight - 1) * gap
-  return parseFloat(filledHeight.toFixed(2)) // 保留2位小数
-}
-
-// 像素坐标转网格坐标
-export function pixelsToGrid(pixelPos: Position, gridConfig: GridConfig): Position {
-  const { cellWidth, cellHeight, gap } = gridConfig
-  const unitWidth = cellWidth + gap
-  const unitHeight = cellHeight + gap
-  
-  return {
-    x: Math.floor(pixelPos.x / unitWidth),
-    y: Math.floor(pixelPos.y / unitHeight)
-  }
-}
-
-// 网格坐标转像素坐标
-export function gridToPixels(gridPos: Position, gridConfig: GridConfig): Position {
-  const { cellWidth, cellHeight, gap } = gridConfig
-  const unitWidth = cellWidth + gap
-  const unitHeight = cellHeight + gap
-  
-  return {
-    x: gridPos.x * unitWidth,
-    y: gridPos.y * unitHeight
-  }
-}
-
-// 计算容器需要的高度
-export function calculateContainerHeight(
-  components: ComponentItemModel[], 
-  gridConfig: GridConfig,
-  containerHeight: number
-): number {
-  if (components.length === 0) return containerHeight
-  
-  let maxBottom = 0
-  components.forEach(comp => {
-    const bottom = comp.y + comp.height
-    if (bottom > maxBottom) {
-      maxBottom = bottom
-    }
-  })
-  
-  // 不允许超出容器高度，如果超出则返回容器高度
-  return Math.min(maxBottom + gridConfig.gap, containerHeight)
 }
 
 // 检查位置是否可用
@@ -204,25 +137,7 @@ export function canAddComponent(
   return reorganizeLayout(testComponents, containerInfo, gridConfig)
 }
 
-// export const calculateGridPosition = (
-//   clientX: number,
-//   clientY: number,
-//   container: HTMLElement,
-//   gridConfig: GridConfig
-// ): Position => {
-//   const rect = container.getBoundingClientRect()
-
-//   const x = Math.floor((clientX - rect.left) / (gridConfig.cellSize! + gridConfig.gap))
-//   const y = Math.floor((clientY - rect.top) / (gridConfig.cellSize! + gridConfig.gap))
-  
-//   return {
-//     x: Math.max(0, Math.min(x, gridConfig.columns - 1)),
-//     y: Math.max(0, Math.min(y, gridConfig.rows - 1))
-//   }
-// }
-
 // 计算可用空间
-
 export function calculateAvailableSpace(
   components: ComponentItemModel[], 
   containerInfo: ContainerInfo, 
@@ -254,23 +169,6 @@ export function snapToGrid(position: Position, gridConfig: GridConfig): Position
   }
 }
 
-export function canPlaceComponent(
-  components: ComponentItemModel[],
-  targetComponent: ComponentItemModel,
-  targetPosition: Position,
-  containerInfo: ContainerInfo,
-  gridConfig: GridConfig
-): boolean {
-  return validatePosition(
-    components.filter(c => c.id !== targetComponent.id),
-    '',
-    targetPosition,
-    targetComponent,
-    containerInfo,
-    gridConfig
-  )
-}
-
 // 重新组织布局（基于像素的流式布局）
 export function reorganizeLayout(
   components: ComponentItemModel[], 
@@ -279,7 +177,7 @@ export function reorganizeLayout(
 ): boolean {
   if (components.length === 0) return true
   
-  const { gap, cellWidth, cellHeight } = gridConfig
+  const { gap } = gridConfig
   const containerWidth = containerInfo.width // 减去 padding
   const containerHeight = containerInfo.height
   
@@ -326,7 +224,7 @@ export function reorganizeLayout(
 
 // 添加一个专门用于调整单个组件填充的函数
 export function autoFillComponent(component: ComponentItemModel, gridConfig: GridConfig): void {
-  const { cellWidth, cellHeight, gap } = gridConfig
+  const { cellWidth, gap } = gridConfig
   
   // 确保最小尺寸
   const minWidth = component.minWidth || 100
@@ -337,15 +235,10 @@ export function autoFillComponent(component: ComponentItemModel, gridConfig: Gri
 
   // 计算当前网格数
   const currentGridWidth = calculateGridWidth(component.width, cellWidth, gap)
-  const currentGridHeight = calculateGridHeight(component.height, cellHeight, gap)
-  
-  // 计算填充后的尺寸
   const filledWidth = calculateFilledWidth(currentGridWidth, cellWidth, gap)
-  const filledHeight = calculateFilledHeight(currentGridHeight, cellHeight, gap)
   
   // 更新组件尺寸
   component.width = filledWidth
-  component.height = filledHeight
 }
 
 // 修改组件调整大小时也支持自动填充
@@ -354,7 +247,7 @@ export function resizeComponentWithAutoFill(
   newSize: Size,
   gridConfig: GridConfig
 ): Size {
-  const { cellWidth, cellHeight, gap } = gridConfig
+  const { cellWidth, gap } = gridConfig
   
   // 确保最小尺寸
   const minWidth = component.minWidth || 100
@@ -365,55 +258,16 @@ export function resizeComponentWithAutoFill(
 
   // 计算新的网格数
   const gridWidth = calculateGridWidth(actualWidth, cellWidth, gap)
-  const gridHeight = calculateGridHeight(actualHeight, cellHeight, gap)
-  
-  // 计算填充后的尺寸
   const filledWidth = calculateFilledWidth(gridWidth, cellWidth, gap)
-  const filledHeight = calculateFilledHeight(gridHeight, cellHeight, gap)
-  
-  return {
-    width: filledWidth,
-    height: filledHeight
-  }
-}
 
-// 获取当前布局信息
-export function getLayoutInfo(
-  components: ComponentItemModel[],
-  containerInfo: ContainerInfo,
-  gridConfig: GridConfig
-) {
-  let currentX = 0
-  let currentY = 0
-  let currentRowHeight = 0
-  const rows: number[] = []
-  
-  for (const comp of components) {
-    if (currentX + comp.width > containerInfo.width) {
-      rows.push(currentRowHeight)
-      currentY += currentRowHeight + gridConfig.gap
-      currentX = 0
-      currentRowHeight = 0
-    }
-    
-    currentRowHeight = Math.max(currentRowHeight, comp.height)
-    currentX += comp.width + gridConfig.gap
-  }
-  
-  if (currentRowHeight > 0) {
-    rows.push(currentRowHeight)
-  }
-  
-  const totalHeight = rows.reduce((sum, height, index) => {
-    return sum + height + (index > 0 ? gridConfig.gap : 0)
-  }, 0)
-  
+  // 确保填充后的宽度不小于最小值
+  const finalWidth = Math.max(filledWidth, minWidth)
+  // 高度保持不变，不进行栅格填充
+  const finalHeight = Math.max(actualHeight, minHeight)
+
   return {
-    rows,
-    totalHeight,
-    willOverflow: totalHeight > containerInfo.height,
-    currentPosition: { x: currentX, y: currentY },
-    currentRowHeight
+    width: finalWidth,
+    height: finalHeight
   }
 }
 
@@ -427,7 +281,6 @@ export function getAffectedComponents(
   gridConfig: GridConfig
 ): { affected: ComponentItemModel[]; canResize: boolean } {
   const affected: ComponentItemModel[] = []
-  let canResize = true
   
   // 创建临时组件列表，用于模拟调整后的状态
   const tempComponents = components.map(comp => 

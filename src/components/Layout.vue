@@ -49,7 +49,7 @@
   />
 </template>
 <script lang="ts" setup>
-import { ref, computed, reactive, provide, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, reactive, provide, nextTick, onMounted, onUnmounted } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
 import ComponentItem from './ComponentItem.vue';
 import AddComponent from './AddComponent.vue';
@@ -153,44 +153,6 @@ const onScroll = (e: Event) => {
   const target = e.target as HTMLElement
   containerInfo.scrollTop = target.scrollTop
 }
-
-// const addComponents = (selectedComponents: ComponentItemModel[]) => {
-//   let addedCount = 0
-//   const failedComponents: string[] = []
-
-//   selectedComponents.forEach(comp => {
-//     const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
-//     if (position) {
-//        const newComponent: ComponentItemModel = {
-//         ...comp,
-//         id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-//         x: position.x,
-//         y: position.y
-//       }
-      
-//       autoFillComponent(newComponent, gridConfig)
-
-//       components.value.push(newComponent)
-//       addedCount++
-//     }
-//   })
-
-//   if (addedCount > 0) {
-//     console.log(`成功添加 ${addedCount} 个组件`)
-//     // 添加后重新组织布局
-//     nextTick(() => {
-//       reorganizeLayout(components.value, containerInfo, gridConfig)
-//     })
-//   }
-  
-//   if (addedCount < selectedComponents.length) {
-//     console.warn('部分组件因空间不足未能添加')
-//   }
-  
-//   addComponentRef.value.close()
-// }
-
-// 组件调整大小
 
 // 添加组件时的优化逻辑
 const addComponents = (selectedComponents: ComponentItemModel[]) => {
@@ -301,15 +263,6 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
     containerInfo,
     gridConfig
   )
-
-  // 验证新位置和尺寸
-  // if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {// 直接更新组件属性
-  //   component.x = newPosition.x
-  //   component.y = newPosition.y
-  //   component.width = newSize.width
-  //   component.height = newSize.height
-  //   reorganizeLayout(components.value, containerInfo, gridConfig)
-  // }
 
   if (validationResult.valid) {
     component.x = newPosition.x
