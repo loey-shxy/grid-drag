@@ -293,8 +293,13 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
   const filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
   
   // 验证新位置和尺寸
-  if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {
-    Object.assign({}, component, newPosition, filledSize)
+  if (validatePosition(components.value, id, newPosition, filledSize, containerInfo, gridConfig)) {// 直接更新组件属性
+    component.x = newPosition.x
+    component.y = newPosition.y
+    component.width = newSize.width
+    component.height = newSize.height
+
+    // Object.assign(component, newPosition, filledSize)
     reorganizeLayout(components.value, containerInfo, gridConfig)
   }
 }
@@ -308,7 +313,8 @@ const onComponentDrag = (id: string, newPosition: Position) => {
   const snappedPosition = snapToGrid(newPosition, gridConfig)
   
   if (validatePosition(components.value, id, snappedPosition, component, containerInfo, gridConfig)) {
-    Object.assign(component, snappedPosition)
+    component.x = snappedPosition.x
+    component.y = snappedPosition.y
     reorganizeLayout(components.value, containerInfo, gridConfig)
   }
 }

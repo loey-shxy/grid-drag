@@ -55,8 +55,8 @@ const componentStyle = computed(() => {
     position: 'absolute',
     left: `${props.component.x}px`,
     top: `${props.component.y}px`,
-    width: `${props.component.width + 2}px`,
-    height: `${props.component.height + 2}px`,
+    width: `${props.component.width}px`,
+    height: `${props.component.height}px`,
     transform: isDragging.value ? 'scale(1.02)' : 'none',
     zIndex: isDragging.value || isResizing.value ? 100 : 1
   }
@@ -224,8 +224,8 @@ const onResizeStart = (position: string, e: MouseEvent) => {
     newWidth = Math.max(props.component.minWidth || 100, newWidth)
     newHeight = Math.max(props.component.minHeight || 60, newHeight)
     
-      // 应用自动填充
-      const filledSize = resizeComponentWithAutoFill(
+    // 应用自动填充
+    const filledSize = resizeComponentWithAutoFill(
       props.component, 
       { width: newWidth, height: newHeight }, 
       props.gridConfig
@@ -239,6 +239,9 @@ const onResizeStart = (position: string, e: MouseEvent) => {
       filledSize.height = containerHeight - newY
     }
 
+    filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
+    filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
+
     emit('resize', props.component.id, {
       width: parseFloat(filledSize.width.toFixed(2)),
       height: parseFloat(filledSize.height.toFixed(2)),
@@ -250,11 +253,13 @@ const onResizeStart = (position: string, e: MouseEvent) => {
   const onMouseUp = () => {
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
+    document.removeEventListener('mouseleave', onMouseUp) // 添加鼠标离开监听
     isResizing.value = false
   }
   
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
+  document.addEventListener('mouseleave', onMouseUp) // 鼠标离开窗口时也结束
   isResizing.value = true
 }
 
