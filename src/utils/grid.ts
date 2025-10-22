@@ -129,7 +129,7 @@ export function findAvailablePosition(
   }
 
   // 计算组件占用的列数
-  const spanCols = Math.ceil((newComponent.width + gap) / (columnWidth + gap))
+  const spanCols = Math.ceil(newComponent.width / columnWidth)
   const actualSpanCols = Math.min(spanCols, COLUMNS)
 
   // 计算每列的当前高度
@@ -137,13 +137,17 @@ export function findAvailablePosition(
 
   // 根据现有组件更新列高度
   for (const comp of components) {
-    const startCol = Math.floor(comp.x / (columnWidth + gap))
-    const compSpanCols = Math.ceil((comp.width + gap) / (columnWidth + gap))
+    // 修正列索引计算：使用单位宽度而不是加上gap
+    const unitWidth = columnWidth + gap
+    const startCol = Math.floor(comp.x / unitWidth)
+    const compSpanCols = Math.ceil(comp.width / columnWidth)
     const endCol = Math.min(startCol + compSpanCols, COLUMNS)
     const compBottomY = comp.y + comp.height + gap
 
     for (let i = startCol; i < endCol; i++) {
-      columnHeights[i] = Math.max(columnHeights[i] || 0, compBottomY)
+      if (i >= 0 && i < COLUMNS) {
+        columnHeights[i] = Math.max(columnHeights[i] || 0, compBottomY)
+      }
     }
   }
 
@@ -163,7 +167,8 @@ export function findAvailablePosition(
     }
   }
 
-  const newX = bestStartCol * (columnWidth + gap)
+  const unitWidth = columnWidth + gap
+  const newX = bestStartCol * unitWidth
   const newY = minHeight
 
   // 检查是否超出容器高度
@@ -359,7 +364,7 @@ export function snapToColumnGridWithSmartHeight(
 
     // 检查水平重叠（使用吸附后的X坐标）
     const horizontalOverlap = snappedX < comp.x + comp.width && snappedX + componentSize.width > comp.x
-    
+
     // 检查是否在上方（组件底部在当前位置上方）
     const isAbove = comp.y + comp.height <= position.y
 
