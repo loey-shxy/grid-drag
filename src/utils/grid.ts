@@ -135,7 +135,7 @@ export function findAvailablePosition(
     return null
   }
 
-  return { x: newX, y: newY }
+  return { x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)) }
 }
 
 
@@ -230,8 +230,8 @@ export function reorganizeLayout(
     }
 
     // 计算组件的实际位置
-    comp.x = bestStartCol * (columnWidth + gap)
-    comp.y = minHeight
+    comp.x = parseFloat((bestStartCol * (columnWidth + gap)).toFixed(2))
+    comp.y = parseFloat(minHeight.toFixed(2))
 
     // 检查是否超出容器高度
     if (comp.y + comp.height > containerHeight) {
@@ -247,25 +247,6 @@ export function reorganizeLayout(
   }
 
   return true // 布局成功
-}
-
-// 添加一个专门用于调整单个组件填充的函数
-export function autoFillComponent(component: ComponentItemModel, gridConfig: GridConfig): void {
-  const { cellWidth, gap } = gridConfig
-
-  // 确保最小尺寸
-  const minWidth = component.minWidth || 100
-  const minHeight = component.minHeight || 60
-
-  component.width = Math.max(component.width, minWidth)
-  component.height = Math.max(component.height, minHeight)
-
-  // 计算当前网格数
-  const currentGridWidth = calculateGridWidth(component.width, cellWidth, gap)
-  const filledWidth = calculateFilledWidth(currentGridWidth, cellWidth, gap)
-
-  // 更新组件尺寸
-  component.width = filledWidth
 }
 
 // 基于24列栅格系统的组件自动填充
@@ -290,7 +271,7 @@ export function autoFillComponentToGrid(
   const filledWidth = actualCols * columnWidth + (actualCols - 1) * gap
 
   // 更新组件宽度为填充后的宽度
-  component.width = filledWidth
+  component.width = parseFloat(filledWidth.toFixed(2))
 }
 
 // 修改组件调整大小时也支持自动填充（基于24列栅格）
@@ -327,8 +308,8 @@ export function resizeComponentWithAutoFill(
   const finalHeight = Math.max(actualHeight, minHeight)
 
   return {
-    width: finalWidth,
-    height: finalHeight
+    width: parseFloat(finalWidth.toFixed(2)),
+    height: parseFloat(finalHeight.toFixed(2))
   }
 }
 

@@ -3,66 +3,79 @@
     <div class="grid-header_left"></div>
     <div class="grid-header_right">
       <a-space>
-        <a-button @click="openModal">添加组件</a-button>
-        <a-button type="primary" @click="saveLayout">保存布局</a-button>
+        <a-button type="primary" @click="openModal">添加组件</a-button>
+        <slot name="extra"></slot>
       </a-space>
     </div>
   </header>
   <div class="grid-container">
-    <div 
-      ref="gridContainer"
-      class="grid-content"
-      :style="gridStyle"
-      @dragover="onDragOver"
-    >
+    <div ref="gridContainer" class="grid-content" :style="gridStyle" @dragover="onDragOver">
       <!-- 网格背景 -->
-      <div 
-        class="grid-background"
-        :style="gridBackgroundStyle"
-      >
-          <div 
-            class="grid-cell" 
-            v-for="item in COLUMNS"
-            :key="item"
-          >
+      <div class="grid-background" :style="gridBackgroundStyle">
+        <div class="grid-cell" v-for="item in COLUMNS" :key="item">
         </div>
       </div>
-
-      <ComponentItem
-        v-for="component in components"
-        :key="component.id"
+      <GridsterItem
+        v-for="component in addedComponents" 
+        :key="component.id" 
         :component="component"
-        :grid-config="gridConfig"
-        :container-info="containerInfo"
-        @resize="onComponentResize"
+        :grid-config="gridConfig" 
+        :container-info="containerInfo" 
+        @resize="onComponentResize" 
         @drag="onComponentDrag"
-        @remove="removeComponent"
-      />
+        @remove="removeComponent">
+        <slot name="item" :itemData="component"></slot>
+      </GridsterItem>
     </div>
   </div>
-
   <AddComponent 
-    ref="addComponentRef"
+    ref="addComponentRef" 
     @confirm="addComponents"
-  />
+    :component-library="props.componentLibrary"
+  >
+    <template v-for="slot in Object.keys($slots)" :key="slot" #[slot]="slotProps">
+      <slot :name="slot" v-bind="slotProps || {}"></slot>
+    </template>
+  </AddComponent>
 </template>
-<script lang="ts" setup>
-import { ref, computed, reactive, provide, nextTick, onMounted, onUnmounted } from 'vue';
+
+<script setup lang="ts">
+import { ref, computed, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
-import ComponentItem from './ComponentItem.vue';
-import AddComponent from './AddComponent.vue';
 import { COLUMNS } from '../utils/constant';
-import { 
-  reorganizeLayout, 
-  validatePosition, 
-  findAvailablePosition, 
-  snapToGrid, 
-  calculateAvailableSpace,
-  canAddComponent,
-  autoFillComponentToGrid,
+import GridsterItem from './GridsterItem.vue';
+import AddComponent from './AddComponent.vue';
+
+import {
+  reorganizeLayout,
+  validatePosition,
+  snapToGrid,
   resizeComponentWithAutoFill,
   validatePositionWithLayout,
+  findAvailablePosition,
+  canAddComponent,
+  autoFillComponentToGrid,
 } from '../utils/grid';
+
+interface Props {
+  componentLibrary: ComponentItemModel[]
+  addedComponents: ComponentItemModel[]
+}
+const props = defineProps<Props>()
+const emit = defineEmits([
+  'get-container-size', 
+  'add-component',
+  'update:added-components'
+])
+
+const components = computed({
+  get: () => {
+    return props.addedComponents ? props.addedComponents : [];
+  },
+  set: (val: ComponentItemModel[]) => {
+    emit('update:added-components', val);
+  },
+})
 
 const gridConfig = reactive<GridConfig>({
   gap: 10,
@@ -75,9 +88,6 @@ const containerInfo = reactive<ContainerInfo>({
   height: 0,
   scrollTop: 0
 })
-
-const components = ref<ComponentItemModel[]>([])
-const addComponentRef = ref()
 const gridContainer = ref<HTMLElement>()
 
 // 计算容器高度 - 不允许超出容器高度
@@ -85,19 +95,18 @@ const containerHeight = computed(() => {
   return containerInfo.height // 直接使用容器高度，不允许滚动
 })
 
-
 // 计算列宽（自适应）
 const updateCellWidth = () => {
   if (!gridContainer.value) return
-  
+
   const container = gridContainer.value
   containerInfo.width = container.clientWidth
   containerInfo.height = container.clientHeight
-  
+
   // 固定24列，直接计算列宽
   const totalGapWidth = 23 * gridConfig.gap
   const cellWidth = (containerInfo.width - totalGapWidth) / 24
-  
+
   // 保留2位小数，设置最小列宽
   gridConfig.cellWidth = Math.max(parseFloat(cellWidth.toFixed(2)), 20)
 }
@@ -107,7 +116,7 @@ const updateCellWidth = () => {
 const gridStyle = computed(() => {
   const gap = gridConfig.gap
   const cols = COLUMNS
-  
+
   return {
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
     gridTemplateRows: `repeat(auto-fit, 100%)`,
@@ -121,7 +130,7 @@ const gridStyle = computed(() => {
 const gridBackgroundStyle = computed(() => {
   const gap = gridConfig.gap
   const cols = COLUMNS
-  
+
   return {
     gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`,
     gap: `${gap}px`,
@@ -130,95 +139,20 @@ const gridBackgroundStyle = computed(() => {
   }
 })
 
-const openModal = () => {
-  addComponentRef.value.open()
-}
-
-// 向子组件提供布局容器信息
-provide('layoutContainer', {
-  value: {
-    components: components.value,
-    gridConfig,
-    containerInfo,
-    columns: COLUMNS,
-    availableSpace: computed(() => calculateAvailableSpace(components.value, containerInfo, gridConfig))
-  }
-})
-
-
-// 滚动事件
-const onScroll = (e: Event) => {
-  const target = e.target as HTMLElement
-  containerInfo.scrollTop = target.scrollTop
-}
-
-// 添加组件时的优化逻辑
-const addComponents = (selectedComponents: ComponentItemModel[]) => {
-  let addedCount = 0
-  const failedComponents: string[] = []
-  
-  selectedComponents.forEach(comp => {
-    // 提前检查是否可以添加
-    if (!canAddComponent(components.value, comp, containerInfo, gridConfig)) {
-      failedComponents.push(comp.name)
-      return
-    }
-    
-    const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
-    if (position) {
-      const newComponent: ComponentItemModel = {
-        ...comp,
-        id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
-        x: position.x,
-        y: position.y
-      }
-      
-      // 确保组件尺寸正确
-      autoFillComponentToGrid(newComponent, gridConfig.cellWidth, gridConfig.gap)
-      
-      // 临时添加并重新布局
-      const tempComponents = [...components.value, newComponent]
-      const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig)
-      
-      if (layoutSuccess) {
-        components.value.push(newComponent)
-        addedCount++
-        console.log(`✓ 成功添加: ${comp.name} 位置: (${position.x}, ${position.y})`)
-      } else {
-        console.warn(`✗ 布局失败: ${comp.name}`)
-        failedComponents.push(comp.name)
-      }
-    } else {
-      console.warn(`✗ 找不到合适位置: ${comp.name}`)
-      failedComponents.push(comp.name)
-    }
-  })
-  
-  if (failedComponents.length > 0) {
-    alert(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
-  }
-  
-  if (addedCount > 0) {
-    // 最终重新布局确保所有组件位置正确
-    reorganizeLayout(components.value, containerInfo, gridConfig)
-  }
-  
-  addComponentRef.value.open()
-}
 
 // 在容器大小变化时重新布局
 const updateContainerInfo = () => {
   if (!gridContainer.value) return
-  
+
   const container = gridContainer.value
   const oldWidth = containerInfo.width
   const oldHeight = containerInfo.height
-  
+
   containerInfo.width = container.clientWidth
   containerInfo.height = container.clientHeight
-  
+
   updateCellWidth()
-  
+
   // 如果容器尺寸发生变化，重新布局
   if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
     console.log('容器尺寸变化，重新布局')
@@ -229,29 +163,29 @@ const updateContainerInfo = () => {
 const onComponentResize = (id: string, newData: Size & Partial<Position> & { resizeType?: string }) => {
   const componentIndex = components.value.findIndex(c => c.id === id)
   if (componentIndex === -1) return
-  
+
   const component = components.value[componentIndex]!
   const newSize: Size = {
     width: newData.width || component!.width,
     height: newData.height || component!.height
   }
-  
+
   const newPosition: Position = {
     x: newData.x !== undefined ? newData.x : component!.x,
     y: newData.y !== undefined ? newData.y : component!.y
   }
-  
+
   // 根据调整类型决定是否应用自动填充
   let filledSize = newSize
   const resizeType = newData.resizeType || ''
   const isWidthResize = ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(resizeType)
-  
+
   if (isWidthResize) {
     // 只有在调整宽度相关的操作时才进行栅格填充
     filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig, containerInfo.width)
   }
-  
-    // 使用智能验证（考虑动态布局）
+
+  // 使用智能验证（考虑动态布局）
   const validationResult = validatePositionWithLayout(
     components.value,
     id,
@@ -281,7 +215,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
     // 最终重新布局确保一切正确（跳过自动填充，保持用户调整）
     reorganizeLayout(components.value, containerInfo, gridConfig, true)
   } else {
-     // 可以尝试只调整尺寸不调整位置
+    // 可以尝试只调整尺寸不调整位置
     const fallbackResult = validatePositionWithLayout(
       components.value,
       id,
@@ -294,7 +228,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
     if (fallbackResult.valid) {
       component.width = filledSize.width
       component.height = filledSize.height
-      
+
       // 更新受影响的组件
       if (fallbackResult.affectedComponents.length > 0) {
         fallbackResult.affectedComponents.forEach(affectedComp => {
@@ -305,7 +239,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
           }
         })
       }
-      
+
       reorganizeLayout(components.value, containerInfo, gridConfig, true)
     }
   }
@@ -313,10 +247,9 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
 
 // 组件拖拽
 const onComponentDrag = (id: string, newPosition: Position) => {
-  console.log(`output->id`,id)
   const component = components.value.find(c => c.id === id)
   if (!component) return
-  
+
   // 吸附到网格
   const snappedPosition = snapToGrid(newPosition, gridConfig)
   if (validatePosition(components.value, id, snappedPosition, component, containerInfo, gridConfig)) {
@@ -332,7 +265,7 @@ const removeComponent = (id: string) => {
   if (index !== -1) {
     components.value.splice(index, 1)
     console.log(`已移除组件: ${id}`)
-    
+
     // 移除后重新组织布局
     nextTick(() => {
       reorganizeLayout(components.value, containerInfo, gridConfig)
@@ -351,23 +284,23 @@ const onDragOver = (e: DragEvent) => {
 const onDrop = (e: DragEvent) => {
   console.log('drop')
   e.preventDefault()
-  
+
   if (!gridContainer.value || !e.dataTransfer) return
-  
+
   const componentId = e.dataTransfer.getData('text/plain')
   if (!componentId) return
-  
+
   const component = components.value.find(c => c.id === componentId)
   if (!component) return
-  
+
   // 计算放置位置（直接使用像素坐标）
   const rect = gridContainer.value.getBoundingClientRect()
   const scrollTop = containerInfo.scrollTop || 0
   const pixelX = e.clientX - rect.left - gridConfig.gap
   const pixelY = e.clientY - rect.top - gridConfig.gap + scrollTop
-    
+
   const newPosition = snapToGrid({ x: pixelX, y: pixelY }, gridConfig)
-  
+
   if (validatePosition(components.value, componentId, newPosition, component, containerInfo, gridConfig)) {
     component.x = newPosition.x
     component.y = newPosition.y
@@ -375,68 +308,18 @@ const onDrop = (e: DragEvent) => {
   }
 }
 
-// 保存布局
-const saveLayout = () => {
-  const layoutData = {
-    gridConfig: { ...gridConfig },
-    components: components.value.map(comp => ({
-      id: comp.id,
-      type: comp.type,
-      name: comp.name,
-      x: comp.x,
-      y: comp.y,
-      width: comp.width,
-      height: comp.height,
-      minWidth: comp.minWidth,
-      minHeight: comp.minHeight
-    }))
-  }
-  
-  try {
-    localStorage.setItem('drag-layout-data', JSON.stringify(layoutData))
-    console.log('布局保存成功', layoutData)
-    alert('布局保存成功！')
-  } catch (error) {
-    console.error('保存布局失败:', error)
-    alert('保存布局失败！')
-  }
-}
-
-// 加载保存的布局
-const loadLayout = () => {
-  try {
-    const saved = localStorage.getItem('drag-layout-data')
-    if (saved) {
-      const layoutData = JSON.parse(saved)
-      
-      Object.assign(gridConfig, layoutData.gridConfig)
-      components.value = layoutData.components.map((comp: any) => ({
-        ...comp,
-        id: comp.id || `${comp.type}-${Date.now()}`
-      }))
-      
-      console.log('布局加载成功')
-    }
-  } catch (error) {
-    console.error('加载布局失败:', error)
-  }
-}
-
 // ResizeObserver 监听容器大小变化
 let resizeObserver: ResizeObserver | null = null
 
-
 // 初始化
 onMounted(() => {
-  loadLayout()
-  
   if (gridContainer.value) {
     resizeObserver = new ResizeObserver(() => {
       updateContainerInfo()
     })
     resizeObserver.observe(gridContainer.value)
   }
-  
+
   updateContainerInfo()
   window.addEventListener('resize', updateContainerInfo)
 })
@@ -448,6 +331,74 @@ onUnmounted(() => {
   }
   window.removeEventListener('resize', updateContainerInfo)
 })
+
+watch(
+  () => containerInfo,
+  () => emit('get-container-size', containerInfo),
+  { deep: true }
+)
+
+const addComponentRef = ref()
+
+const openModal = () => {
+  console.log(addComponentRef.value)
+  addComponentRef.value.open()
+}
+
+// 添加组件时的优化逻辑
+const addComponents = (selectedComponents: ComponentItemModel[]) => {
+  let addedCount = 0
+  const failedComponents: string[] = []
+
+  selectedComponents.forEach(comp => {
+    // 提前检查是否可以添加
+    if (!canAddComponent(components.value, comp, containerInfo, gridConfig)) {
+      failedComponents.push(comp.name)
+      return
+    }
+
+    const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
+    if (position) {
+      const newComponent: ComponentItemModel = {
+        ...comp,
+        id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        x: position.x,
+        y: position.y
+      }
+
+      // 确保组件尺寸正确
+      autoFillComponentToGrid(newComponent, gridConfig.cellWidth, gridConfig.gap)
+
+      // 临时添加并重新布局
+      const tempComponents = [...components.value, newComponent]
+      const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig)
+
+      if (layoutSuccess) {
+        components.value.push(newComponent)
+        addedCount++
+        console.log(`✓ 成功添加: ${comp.name} 位置: (${position.x}, ${position.y})`)
+      } else {
+        console.warn(`✗ 布局失败: ${comp.name}`)
+        failedComponents.push(comp.name)
+      }
+    } else {
+      console.warn(`✗ 找不到合适位置: ${comp.name}`)
+      failedComponents.push(comp.name)
+    }
+  })
+
+  if (failedComponents.length > 0) {
+    alert(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
+  }
+
+  if (addedCount > 0) {
+    // 最终重新布局确保所有组件位置正确
+    reorganizeLayout(components.value, containerInfo, gridConfig)
+  }
+
+  addComponentRef.value.open()
+}
+
 
 </script>
 
@@ -491,7 +442,8 @@ onUnmounted(() => {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   justify-content: start;
   align-content: start;
-  min-width: 0; /* 防止网格溢出 */
+  min-width: 0;
+  /* 防止网格溢出 */
 }
 
 .grid-background {

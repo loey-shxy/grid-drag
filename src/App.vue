@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import Layout from './components/Layout.vue';
+import Demo from './views/Demo.vue';
 </script>
 <template>
-  <Layout />
+  <Demo />
 </template>
 
 <style scoped>

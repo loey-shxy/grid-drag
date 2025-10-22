@@ -1,16 +1,15 @@
 <template>
-  <div class="component-item" :class="{ resizing: isResizing }" :style="componentStyle" draggable="true"
-    @dragstart="onDragStart" @drag="onDrag" @dragend="onDragEnd">
-    <div class="component-content">
-      <div class="component-header">
-        <span class="component-name">{{ component.name }}</span>
-        <span class="component-size">{{ component.width }}×{{ component.height }}</span>
-      </div>
-      <div class="component-body">
-        {{ getComponentDescription(component.type) }}
-      </div>
-    </div>
-    <icon-delete :size="16" class="remove-btn" @click="$emit('remove', component.id)" />
+  <div 
+    class="gridster-item" 
+    :class="{ resizing: isResizing }" 
+    :style="componentStyle" 
+    draggable="true"
+    @dragstart="onDragStart" 
+    @drag="onDrag" 
+    @dragend="onDragEnd"
+  >
+
+    <slot></slot>
 
     <!-- 调整手柄 -->
     <div class="resize-overlay">
@@ -23,6 +22,8 @@
       <div class="corner bottom-left" @mousedown="onCornerMouseDown('bottom-left', $event)"></div>
       <div class="corner bottom-right" @mousedown="onCornerMouseDown('bottom-right', $event)"></div>
     </div>
+
+    <icon-delete :size="16" class="remove-btn" @click="$emit('remove', component.id)" />
   </div>
 </template>
 
@@ -175,78 +176,66 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     let newX = startXPos
     let newY = startYPos
 
-    // 根据手柄位置计算新的像素尺寸
+    // 根据手柄位置计算新的像素尺寸（简化逻辑，边缘调整不改变位置）
     switch (type) {
       case 'right':
+        // 右边缘：只改变宽度，从右侧扩展
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         break
 
       case 'left':
+        // 左边缘：只改变宽度，位置不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
-        newX = Math.max(0, startXPos + deltaX)
         break
 
       case 'bottom':
+        // 下边缘：只改变高度，从下侧扩展
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         break
 
       case 'top':
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
-        newY = Math.max(0, startYPos + deltaY)
+        newY = startYPos + newHeight
+        console.log(newY)
         break
 
       case 'top-right':
+        // 右上角：右侧扩展宽度，上侧调整高度
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
-        newY = Math.max(0, startYPos + deltaY)
         break
 
       case 'top-left':
+        // 左上角：左侧调整宽度，上侧调整高度
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
-        newX = Math.max(0, startXPos + deltaX)
-        newY = Math.max(0, startYPos + deltaY)
         break
 
       case 'bottom-left':
+        // 左下角：左侧调整宽度，下侧扩展高度
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
-        newX = Math.max(0, startXPos + deltaX)
-
-        // 允许调整到容器底部
-        if (newY + newHeight > containerHeight) {
-          newHeight = containerHeight - newY
-        }
-
         break
 
       case 'bottom-right':
+        // 右下角：右侧扩展宽度，下侧扩展高度
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
-
-        // 允许调整到容器底部
-        if (newY + newHeight > containerHeight) {
-          newHeight = containerHeight - newY
-        }
         break
     }
 
-    // 边界检查
+    // 边界检查：确保组件不超出容器
     if (newX + newWidth > containerWidth) {
       newWidth = containerWidth - newX
     }
-    // 边界检查 - 高度（顶部调整已经在switch中处理）
-    if (type !== 'top' && type !== 'top-left' && type !== 'top-right') {
-      if (newY + newHeight > containerHeight) {
-        newHeight = containerHeight - newY
-      }
+    
+    if (newY + newHeight > containerHeight) {
+      newHeight = containerHeight - newY
     }
 
     // 确保最小尺寸
     newWidth = Math.max(props.component.minWidth || 100, newWidth)
     newHeight = Math.max(props.component.minHeight || 60, newHeight)
-
-    console.log(`调整后原始尺寸: ${newWidth.toFixed(1)}×${newHeight.toFixed(1)}`)
 
     // 根据调整类型决定是否应用自动填充
     let filledSize = { width: newWidth, height: newHeight }
@@ -264,13 +253,13 @@ const onResizeStart = (type: string, e: MouseEvent) => {
       )
     }
 
-    // 边界检查（填充后）- 只检查宽度
+    // 填充后的边界检查
     if (newX + filledSize.width > containerWidth) {
       filledSize.width = containerWidth - newX
       console.log(`填充后右边界限制: 宽度调整为 ${filledSize.width.toFixed(1)}`)
     }
 
-    // 高度边界检查（填充不会改变高度，所以使用原始高度）
+    // 高度边界检查（填充不会改变高度）
     if (newY + filledSize.height > containerHeight) {
       filledSize.height = containerHeight - newY
       console.log(`高度边界限制: 高度调整为 ${filledSize.height.toFixed(1)}`)
@@ -308,25 +297,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
   currentResizeType.value = ''
 }
 
-// 获取组件描述
-const getComponentDescription = (type: string) => {
-  const descriptions: { [key: string]: string } = {
-    'chart-line': '显示数据趋势的折线图',
-    'chart-bar': '比较数据大小的柱状图',
-    'chart-pie': '显示占比的饼图',
-    'table': '展示结构化数据的表格',
-    'card': '信息展示卡片',
-    'metric': '关键指标显示',
-    'text': '文本内容展示',
-    'image': '图片展示',
-    'progress': '进度条显示'
-  }
-  return descriptions[type] || '组件内容'
-}
 </script>
 
 <style lang="scss" scoped>
-.component-item {
+.gridster-item {
   background: white;
   border: 1px solid #e9ecef;
   border-radius: 8px;
@@ -345,54 +319,6 @@ const getComponentDescription = (type: string) => {
 
   &:active {
     transform: scale(0.98);
-  }
-
-  .component-content {
-    padding: 12px;
-    height: 100%;
-    display: flex;
-    flex-direction: column;
-    gap: 8px;
-  }
-
-  .component-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .component-name {
-    font-weight: 600;
-    font-size: 14px;
-    color: #333;
-    flex: 1;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-
-  .component-size {
-    font-size: 12px;
-    color: #666;
-    background: #f8f9fa;
-    padding: 2px 6px;
-    border-radius: 4px;
-    white-space: nowrap;
-  }
-
-  .component-body {
-    flex: 1;
-    font-size: 12px;
-    color: #666;
-    line-height: 1.4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    text-align: center;
-    background: #f8f9fa;
-    border-radius: 4px;
-    padding: 8px;
   }
 
   .remove-btn {
@@ -415,7 +341,7 @@ const getComponentDescription = (type: string) => {
   pointer-events: none;
 }
 
-.component-item:hover .resize-overlay {
+.gridster-item:hover .resize-overlay {
   pointer-events: auto;
 }
 
@@ -500,7 +426,7 @@ const getComponentDescription = (type: string) => {
   cursor: se-resize;
 }
 
-.component-item:hover .remove-btn {
+.gridster-item:hover .remove-btn {
   opacity: 1;
 }
 </style>
