@@ -49,12 +49,10 @@ import { Message } from '@arco-design/web-vue';
 
 import {
   reorganizeLayout,
-  validatePosition,
-  snapToGrid,
   resizeComponentWithAutoFill,
   validatePositionWithLayout,
+  validateDragPosition,
   findAvailablePosition,
-  canAddComponent,
   autoFillComponentToGrid,
 } from '../utils/grid';
 
@@ -260,12 +258,32 @@ const onComponentDrag = (id: string, newPosition: Position) => {
   const component = components.value.find(c => c.id === id)
   if (!component) return
 
-  // 吸附到网格
-  const snappedPosition = snapToGrid(newPosition, gridConfig)
-  if (validatePosition(components.value, id, snappedPosition, component, containerInfo, gridConfig)) {
-    component.x = snappedPosition.x
-    component.y = snappedPosition.y
-    reorganizeLayout(components.value, containerInfo, gridConfig, true)
+  // 使用智能拖拽验证（内部包含智能吸附逻辑）
+  const dragResult = validateDragPosition(
+    components.value,
+    id,
+    newPosition,
+    containerInfo,
+    gridConfig
+  )
+
+  if (dragResult.valid) {
+    // 使用经过智能吸附处理的最终位置
+    component.x = dragResult.finalPosition.x
+    component.y = dragResult.finalPosition.y
+
+    // 更新受影响的组件
+    if (dragResult.affectedComponents.length > 0) {
+      dragResult.affectedComponents.forEach(affectedComp => {
+        const targetComp = components.value.find(c => c.id === affectedComp.id)
+        if (targetComp) {
+          targetComp.x = affectedComp.x
+          targetComp.y = affectedComp.y
+        }
+      })
+    }
+
+    // 智能拖拽验证已经处理了布局调整，不需要额外的reorganizeLayout调用
   }
 }
 
@@ -329,23 +347,17 @@ const openModal = () => {
   addComponentRef.value.open()
 }
 
-// 添加组件时的优化逻辑
+// 添加组件时的优化逻辑（自动向后排列，不重新布局）
 const addComponents = (selectedComponents: ComponentItemModel[]) => {
   let addedCount = 0
   const failedComponents: string[] = []
 
   selectedComponents.forEach(comp => {
-    // 提前检查是否可以添加
-    if (!canAddComponent(components.value, comp, containerInfo, gridConfig)) {
-      failedComponents.push(comp.name)
-      return
-    }
-
     const position = findAvailablePosition(components.value, comp, containerInfo, gridConfig)
     if (position) {
       const newComponent: ComponentItemModel = {
         ...comp,
-        id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+        id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         x: position.x,
         y: position.y
       }
@@ -353,18 +365,10 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
       // 确保组件尺寸正确
       autoFillComponentToGrid(newComponent, gridConfig.cellWidth, gridConfig.gap)
 
-      // 临时添加并重新布局
-      const tempComponents = [...components.value, newComponent]
-      const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig)
-
-      if (layoutSuccess) {
-        components.value.push(newComponent)
-        addedCount++
-        console.log(`✓ 成功添加: ${comp.name} 位置: (${position.x}, ${position.y})`)
-      } else {
-        console.warn(`✗ 布局失败: ${comp.name}`)
-        failedComponents.push(comp.name)
-      }
+      // 直接添加组件，不重新布局
+      components.value.push(newComponent)
+      addedCount++
+      console.log(`✓ 成功添加: ${comp.name} 位置: (${position.x}, ${position.y})`)
     } else {
       console.warn(`✗ 找不到合适位置: ${comp.name}`)
       failedComponents.push(comp.name)
@@ -377,8 +381,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
   }
 
   if (addedCount > 0) {
-    // 最终重新布局确保所有组件位置正确
-    reorganizeLayout(components.value, containerInfo, gridConfig)
+    console.log(`成功添加 ${addedCount} 个组件`)
   }
 
   addComponentRef.value.open()

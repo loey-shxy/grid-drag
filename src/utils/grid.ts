@@ -106,7 +106,7 @@ export const validatePosition = (
   return true
 }
 
-// 查找可用位置（基于瀑布流布局）
+// 查找可用位置（不重新布局，自动向后排列）
 export function findAvailablePosition(
   components: ComponentItemModel[],
   newComponent: ComponentItemModel,
@@ -128,14 +128,9 @@ export function findAvailablePosition(
     return null
   }
 
-  // 模拟添加组件后的布局，检查是否会导致超出容器高度
-  const testComponents = [...components, { ...newComponent, x: 0, y: 0 }]
-  const layoutSuccess = reorganizeLayout(testComponents, containerInfo, gridConfig)
-
-  if (!layoutSuccess) {
-    console.warn('添加此组件会导致超出容器高度')
-    return null
-  }
+  // 计算组件占用的列数
+  const spanCols = Math.ceil((newComponent.width + gap) / (columnWidth + gap))
+  const actualSpanCols = Math.min(spanCols, COLUMNS)
 
   // 计算每列的当前高度
   const columnHeights: number[] = new Array(COLUMNS).fill(0)
@@ -143,18 +138,14 @@ export function findAvailablePosition(
   // 根据现有组件更新列高度
   for (const comp of components) {
     const startCol = Math.floor(comp.x / (columnWidth + gap))
-    const spanCols = Math.ceil((comp.width + gap) / (columnWidth + gap))
-    const endCol = Math.min(startCol + spanCols, COLUMNS)
+    const compSpanCols = Math.ceil((comp.width + gap) / (columnWidth + gap))
+    const endCol = Math.min(startCol + compSpanCols, COLUMNS)
     const compBottomY = comp.y + comp.height + gap
 
     for (let i = startCol; i < endCol; i++) {
       columnHeights[i] = Math.max(columnHeights[i] || 0, compBottomY)
     }
   }
-
-  // 计算新组件占用的列数
-  const spanCols = Math.ceil((newComponent.width + gap) / (columnWidth + gap))
-  const actualSpanCols = Math.min(spanCols, COLUMNS)
 
   // 找到最佳放置位置（高度最低的连续列）
   let bestStartCol = 0
@@ -181,7 +172,23 @@ export function findAvailablePosition(
     return null
   }
 
-  return { x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)) }
+  // 验证新位置不与现有组件重叠
+  const newPosition = { x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)) }
+  const newSize = { width: newComponent.width, height: newComponent.height }
+
+  for (const existingComp of components) {
+    if (hasOverlap(
+      newPosition,
+      newSize,
+      { x: existingComp.x, y: existingComp.y },
+      { width: existingComp.width, height: existingComp.height }
+    )) {
+      console.warn('新组件位置与现有组件重叠')
+      return null
+    }
+  }
+
+  return newPosition
 }
 
 
@@ -216,15 +223,182 @@ export function calculateAvailableSpace(
   }
 }
 
-// 吸附到网格
+// 吸附到网格（吸附到最近的栅格格子）
 export function snapToGrid(position: Position, gridConfig: GridConfig): Position {
   const { cellWidth, cellHeight, gap } = gridConfig
   const unitWidth = cellWidth + gap
   const unitHeight = cellHeight + gap
 
+  // 计算最近的网格位置
+  const nearestGridX = Math.round(position.x / unitWidth) * unitWidth
+  const nearestGridY = Math.round(position.y / unitHeight) * unitHeight
+
   return {
-    x: parseFloat(((position.x / unitWidth) * unitWidth).toFixed(2)),
-    y: parseFloat(((position.y / unitHeight) * unitHeight).toFixed(2))
+    x: parseFloat(nearestGridX.toFixed(2)),
+    y: parseFloat(nearestGridY.toFixed(2))
+  }
+}
+
+// 基于24列栅格系统的智能吸附
+export function snapToColumnGrid(
+  position: Position,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): Position {
+  const { width: containerWidth } = containerInfo
+  const { gap, cellHeight } = gridConfig
+
+  // 计算每列的宽度（24列固定）
+  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
+  const unitWidth = columnWidth + gap
+  const unitHeight = cellHeight + gap
+
+  // 计算最近的列位置
+  let nearestColumn = Math.round(position.x / unitWidth)
+
+  // 确保列索引在有效范围内
+  nearestColumn = Math.max(0, Math.min(nearestColumn, COLUMNS - 1))
+
+  // 计算吸附后的X坐标
+  const snappedX = nearestColumn * unitWidth
+
+  // 计算最近的行位置
+  let nearestRow = Math.round(position.y / unitHeight)
+
+  // 确保行索引不为负数
+  nearestRow = Math.max(0, nearestRow)
+
+  // 计算吸附后的Y坐标
+  const snappedY = nearestRow * unitHeight
+
+  return {
+    x: parseFloat(snappedX.toFixed(2)),
+    y: parseFloat(snappedY.toFixed(2))
+  }
+}
+
+// 智能吸附（考虑组件尺寸，确保不超出边界）
+export function snapToColumnGridWithSize(
+  position: Position,
+  componentSize: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): Position {
+  const { width: containerWidth, height: containerHeight } = containerInfo
+  const { gap } = gridConfig
+
+  // 计算每列的宽度（24列固定）
+  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
+  const unitWidth = columnWidth + gap
+
+  // 计算最近的列位置
+  let nearestColumn = Math.round(position.x / unitWidth)
+
+  // 计算组件占用的列数
+  const componentCols = Math.ceil((componentSize.width + gap) / unitWidth)
+
+  // 确保组件不会超出右边界
+  const maxColumn = COLUMNS - componentCols
+  nearestColumn = Math.max(0, Math.min(nearestColumn, maxColumn))
+
+  // 计算吸附后的X坐标
+  const snappedX = nearestColumn * unitWidth
+
+  // Y坐标不进行栅格吸附，保持原始位置
+  let snappedY = position.y
+
+  // 确保组件不会超出下边界
+  if (snappedY + componentSize.height > containerHeight) {
+    snappedY = containerHeight - componentSize.height
+  }
+
+  // 确保Y坐标不为负数
+  snappedY = Math.max(0, snappedY)
+
+  return {
+    x: parseFloat(snappedX.toFixed(2)),
+    y: parseFloat(snappedY.toFixed(2))
+  }
+}
+
+// 智能高度吸附（只在与上面紧邻组件距离小于等于gap时才吸附）
+export function snapToColumnGridWithSmartHeight(
+  position: Position,
+  componentSize: Size,
+  components: ComponentItemModel[],
+  currentId: string,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): Position {
+  const { width: containerWidth, height: containerHeight } = containerInfo
+  const { gap } = gridConfig
+
+  // 计算每列的宽度（24列固定）
+  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
+  const unitWidth = columnWidth + gap
+
+  // 计算最近的列位置
+  let nearestColumn = Math.round(position.x / unitWidth)
+
+  // 计算组件占用的列数
+  const componentCols = Math.ceil((componentSize.width + gap) / unitWidth)
+
+  // 确保组件不会超出右边界
+  const maxColumn = COLUMNS - componentCols
+  nearestColumn = Math.max(0, Math.min(nearestColumn, maxColumn))
+
+  // 计算吸附后的X坐标
+  const snappedX = nearestColumn * unitWidth
+
+  // 智能Y坐标处理
+  let snappedY = position.y
+
+  // 查找在当前组件上方且有水平重叠的组件
+  const candidateComponents = components.filter(comp => {
+    if (comp.id === currentId) return false
+
+    // 检查水平重叠（使用吸附后的X坐标）
+    const horizontalOverlap = snappedX < comp.x + comp.width && snappedX + componentSize.width > comp.x
+    
+    // 检查是否在上方（组件底部在当前位置上方）
+    const isAbove = comp.y + comp.height <= position.y
+
+    return horizontalOverlap && isAbove
+  })
+
+  if (candidateComponents.length > 0) {
+    // 找到最接近的上方组件（距离当前位置最近的）
+    let closestComponent: ComponentItemModel | null = null
+    let minDistance = Infinity
+
+    for (const comp of candidateComponents) {
+      const distance = position.y - (comp.y + comp.height)
+      if (distance >= 0 && distance < minDistance) {
+        minDistance = distance
+        closestComponent = comp
+      }
+    }
+
+    // 如果距离小于等于gap，则吸附到该组件下方并留出gap距离
+    if (closestComponent && minDistance <= gap) {
+      snappedY = closestComponent.y + closestComponent.height + gap
+      console.log(`高度吸附: 距离=${minDistance}, 吸附到Y=${snappedY}`)
+    } else {
+      console.log(`不进行高度吸附: 距离=${minDistance} > gap=${gap}`)
+    }
+  }
+
+  // 确保组件不会超出下边界
+  if (snappedY + componentSize.height > containerHeight) {
+    snappedY = containerHeight - componentSize.height
+  }
+
+  // 确保Y坐标不为负数
+  snappedY = Math.max(0, snappedY)
+
+  return {
+    x: parseFloat(snappedX.toFixed(2)),
+    y: parseFloat(snappedY.toFixed(2))
   }
 }
 
@@ -472,4 +646,130 @@ export function validatePositionWithLayout(
   )
 
   return { valid: canResize, affectedComponents: affected }
+}
+
+// 严格检查组件重叠
+function hasOverlap(
+  pos1: Position,
+  size1: Size,
+  pos2: Position,
+  size2: Size
+): boolean {
+  const overlapX = pos1.x < pos2.x + size2.width && pos1.x + size1.width > pos2.x
+  const overlapY = pos1.y < pos2.y + size2.height && pos1.y + size1.height > pos2.y
+  return overlapX && overlapY
+}
+
+// 智能验证拖拽位置（严格防止重叠）
+export function validateDragPosition(
+  components: ComponentItemModel[],
+  currentId: string,
+  newPosition: Position,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): { valid: boolean; affectedComponents: ComponentItemModel[]; finalPosition: Position } {
+  const { width: containerWidth, height: containerHeight } = containerInfo
+
+  // 获取当前组件
+  const currentComponent = components.find(c => c.id === currentId)
+  if (!currentComponent) {
+    return { valid: false, affectedComponents: [], finalPosition: newPosition }
+  }
+
+  const currentSize = { width: currentComponent.width, height: currentComponent.height }
+
+  // 使用智能高度吸附，只在与上面紧邻组件距离小于等于gap时才吸附
+  const snappedPosition = snapToColumnGridWithSmartHeight(
+    newPosition,
+    currentSize,
+    components,
+    currentId,
+    containerInfo,
+    gridConfig
+  )
+
+  // 基础边界检查
+  if (snappedPosition.x < 0 ||
+    snappedPosition.y < 0 ||
+    snappedPosition.x + currentSize.width > containerWidth ||
+    snappedPosition.y + currentSize.height > containerHeight) {
+    return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
+  }
+
+  // 严格检查是否与其他组件重叠
+  for (const otherComponent of components) {
+    if (otherComponent.id === currentId) continue
+
+    if (hasOverlap(
+      snappedPosition,
+      currentSize,
+      { x: otherComponent.x, y: otherComponent.y },
+      { width: otherComponent.width, height: otherComponent.height }
+    )) {
+      // 发现重叠，拒绝此位置
+      return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
+    }
+  }
+
+  // 检查是否需要触发布局调整（仅当距离很近时）
+  const needsLayoutAdjustment = shouldTriggerLayout(
+    currentComponent,
+    snappedPosition,
+    currentSize,
+    components,
+    gridConfig.gap
+  )
+
+  if (!needsLayoutAdjustment) {
+    // 没有重叠且不需要布局调整，可以自由拖拽
+    return { valid: true, affectedComponents: [], finalPosition: snappedPosition }
+  }
+
+  // 需要布局调整，但要确保调整后不会产生重叠
+  const draggedComponent = {
+    ...currentComponent,
+    x: snappedPosition.x,
+    y: snappedPosition.y
+  }
+
+  const tempComponents = components.map(comp =>
+    comp.id === currentId ? draggedComponent : { ...comp }
+  )
+
+  const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, false)
+
+  if (!layoutSuccess) {
+    return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
+  }
+
+  // 验证布局后是否有重叠
+  for (let i = 0; i < tempComponents.length; i++) {
+    for (let j = i + 1; j < tempComponents.length; j++) {
+      const comp1 = tempComponents[i]
+      const comp2 = tempComponents[j]
+
+      if (comp1 && comp2 && hasOverlap(
+        { x: comp1.x, y: comp1.y },
+        { width: comp1.width, height: comp1.height },
+        { x: comp2.x, y: comp2.y },
+        { width: comp2.width, height: comp2.height }
+      )) {
+        // 布局后仍有重叠，拒绝此操作
+        return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
+      }
+    }
+  }
+
+  // 找出位置发生变化的组件
+  const affected: ComponentItemModel[] = []
+  components.forEach(comp => {
+    if (comp.id !== currentId) {
+      const tempComp = tempComponents.find(tc => tc.id === comp.id)
+      if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
+        affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
+      }
+    }
+  })
+
+  return { valid: true, affectedComponents: affected, finalPosition: snappedPosition }
 }
