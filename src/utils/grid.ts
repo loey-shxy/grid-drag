@@ -1,28 +1,74 @@
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from "../types/layout";
 import { COLUMNS } from "./constant";
 
-// 计算组件应该占据的网格宽度
-function calculateGridWidth(pixelWidth: number, cellWidth: number, gap: number): number {
-  if (pixelWidth <= 0) return 1
-
-  const unitWidth = cellWidth + gap
-  // 计算需要多少个完整的网格单元
-  let gridCount = Math.floor(pixelWidth / unitWidth)
-
-  // 如果剩余空间大于0，需要额外一个网格
-  const remainder = pixelWidth % unitWidth
-  if (remainder > 0) {
-    gridCount += 1
+// 计算两个组件之间的最小距离
+function getComponentDistance(comp1: ComponentItemModel, comp2: ComponentItemModel): number {
+  // 计算水平距离
+  let horizontalDistance = 0;
+  if (comp1.x + comp1.width <= comp2.x) {
+    // comp1 在 comp2 左侧
+    horizontalDistance = comp2.x - (comp1.x + comp1.width);
+  } else if (comp2.x + comp2.width <= comp1.x) {
+    // comp1 在 comp2 右侧
+    horizontalDistance = comp1.x - (comp2.x + comp2.width);
   }
 
-  return Math.max(1, gridCount)
+  // 计算垂直距离
+  let verticalDistance = 0;
+  if (comp1.y + comp1.height <= comp2.y) {
+    // comp1 在 comp2 上方
+    verticalDistance = comp2.y - (comp1.y + comp1.height);
+  } else if (comp2.y + comp2.height <= comp1.y) {
+    // comp1 在 comp2 下方
+    verticalDistance = comp1.y - (comp2.y + comp2.height);
+  }
+
+  // 如果组件重叠，返回0
+  if (horizontalDistance === 0 && verticalDistance === 0) {
+    return 0;
+  }
+
+  // 返回最小距离（如果一个方向重叠，则返回另一个方向的距离）
+  if (horizontalDistance === 0) return verticalDistance;
+  if (verticalDistance === 0) return horizontalDistance;
+
+  // 如果两个方向都有距离，返回较小的那个
+  return Math.min(horizontalDistance, verticalDistance);
 }
 
-// 计算填充后的像素宽度
-function calculateFilledWidth(gridWidth: number, cellWidth: number, gap: number): number {
-  const filledWidth = gridWidth * cellWidth + (gridWidth - 1) * gap
-  return parseFloat(filledWidth.toFixed(2)) // 保留2位小数
+// 检查组件调整大小后是否需要重新布局
+function shouldTriggerLayout(
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size,
+  allComponents: ComponentItemModel[],
+  gap: number
+): boolean {
+  // 创建调整后的组件副本
+  const resizedComponent = {
+    ...resizingComponent,
+    x: newPosition.x,
+    y: newPosition.y,
+    width: newSize.width,
+    height: newSize.height
+  };
+
+  // 检查与其他组件的距离
+  for (const otherComponent of allComponents) {
+    if (otherComponent.id === resizingComponent.id) continue;
+
+    const distance = getComponentDistance(resizedComponent, otherComponent);
+
+    // 如果距离小于等于gap，需要触发布局调整
+    if (distance <= gap) {
+      return true;
+    }
+  }
+
+  return false;
 }
+
+
 
 // 检查位置是否可用
 export const validatePosition = (
@@ -31,7 +77,7 @@ export const validatePosition = (
   position: Position,
   size: Size,
   containerInfo: ContainerInfo,
-  gridConfig: GridConfig
+  _gridConfig: GridConfig
 ): boolean => {
   const { width: containerWidth, height: containerHeight } = containerInfo
 
@@ -154,7 +200,7 @@ export function canAddComponent(
 export function calculateAvailableSpace(
   components: ComponentItemModel[],
   containerInfo: ContainerInfo,
-  gridConfig: GridConfig
+  _gridConfig: GridConfig
 ) {
   const usedArea = components.reduce((total, comp) => {
     return total + (comp.width * comp.height)
@@ -187,7 +233,8 @@ export function reorganizeLayout(
   components: ComponentItemModel[],
   containerInfo: ContainerInfo,
   gridConfig: GridConfig,
-  skipAutoFill: boolean = false
+  skipAutoFill: boolean = false,
+  onlyOnSizeIncrease: boolean = false
 ): boolean {
   if (components.length === 0) return true
 
@@ -197,6 +244,21 @@ export function reorganizeLayout(
 
   // 计算每列的宽度（24列固定）
   const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
+
+  // 如果是尺寸减小的情况，只检查边界，不重新布局
+  if (onlyOnSizeIncrease) {
+    // 检查所有组件是否仍在容器范围内
+    for (const comp of components) {
+      if (comp.x + comp.width > containerWidth || comp.y + comp.height > containerHeight) {
+        // 如果有组件超出边界，需要调整
+        comp.x = Math.min(comp.x, containerWidth - comp.width)
+        comp.y = Math.min(comp.y, containerHeight - comp.height)
+        comp.x = Math.max(0, comp.x)
+        comp.y = Math.max(0, comp.y)
+      }
+    }
+    return true
+  }
 
   // 记录每列的当前高度
   const columnHeights: number[] = new Array(COLUMNS).fill(0)
@@ -284,8 +346,8 @@ export function resizeComponentWithAutoFill(
   const { gap } = gridConfig
 
   // 计算每列的宽度（24列固定）
-  const columnWidth = containerWidth ? 
-    (containerWidth - (COLUMNS - 1) * gap) / COLUMNS : 
+  const columnWidth = containerWidth ?
+    (containerWidth - (COLUMNS - 1) * gap) / COLUMNS :
     gridConfig.cellWidth
 
   // 确保最小尺寸
@@ -324,6 +386,21 @@ export function getAffectedComponents(
 ): { affected: ComponentItemModel[]; canResize: boolean } {
   const affected: ComponentItemModel[] = []
 
+  // 检查是否是尺寸增加
+  const sizeIncreased = newSize.width > resizingComponent.width || newSize.height > resizingComponent.height
+
+  // 如果尺寸增加，检查是否需要触发布局调整
+  let needsLayoutAdjustment = false;
+  if (sizeIncreased) {
+    needsLayoutAdjustment = shouldTriggerLayout(
+      resizingComponent,
+      newPosition,
+      newSize,
+      components,
+      gridConfig.gap
+    );
+  }
+
   // 创建临时组件列表，用于模拟调整后的状态
   const tempComponents = components.map(comp =>
     comp.id === resizingComponent.id
@@ -331,22 +408,31 @@ export function getAffectedComponents(
       : { ...comp }
   )
 
-  // 重新布局临时组件（跳过自动填充以保持用户调整）
-  const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true)
+  // 只有在需要布局调整时才进行重新布局
+  if (needsLayoutAdjustment) {
+    const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, false)
 
-  if (!layoutSuccess) {
-    return { affected: [], canResize: false }
-  }
-
-  // 找出位置发生变化的组件
-  components.forEach(comp => {
-    if (comp.id !== resizingComponent.id) {
-      const tempComp = tempComponents.find(tc => tc.id === comp.id)
-      if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
-        affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
-      }
+    if (!layoutSuccess) {
+      return { affected: [], canResize: false }
     }
-  })
+
+    // 找出位置发生变化的组件
+    components.forEach(comp => {
+      if (comp.id !== resizingComponent.id) {
+        const tempComp = tempComponents.find(tc => tc.id === comp.id)
+        if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
+          affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
+        }
+      }
+    })
+  } else {
+    // 不需要布局调整，只做边界检查
+    const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, true)
+
+    if (!layoutSuccess) {
+      return { affected: [], canResize: false }
+    }
+  }
 
   return { affected, canResize: true }
 }

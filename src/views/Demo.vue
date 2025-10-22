@@ -251,61 +251,6 @@ onMounted(() => {
     item.desc = getComponentTypeText(item.type)
   })
 })
-
-
-// 保存布局
-// const saveLayout = () => {
-//   const layoutData = {
-//     gridConfig: { ...gridConfig },
-//     components: components.value.map(comp => ({
-//       id: comp.id,
-//       type: comp.type,
-//       name: comp.name,
-//       x: comp.x,
-//       y: comp.y,
-//       width: comp.width,
-//       height: comp.height,
-//       minWidth: comp.minWidth,
-//       minHeight: comp.minHeight
-//     }))
-//   }
-
-//   try {
-//     localStorage.setItem('drag-layout-data', JSON.stringify(layoutData))
-//     console.log('布局保存成功', layoutData)
-//     alert('布局保存成功！')
-//   } catch (error) {
-//     console.error('保存布局失败:', error)
-//     alert('保存布局失败！')
-//   }
-// }
-
-// // 加载保存的布局
-// const loadLayout = () => {
-//   try {
-//     const saved = localStorage.getItem('drag-layout-data')
-//     if (saved) {
-//       const layoutData = JSON.parse(saved)
-
-//       Object.assign(gridConfig, layoutData.gridConfig)
-//       components.value = layoutData.components.map((comp: any) => ({
-//         ...comp,
-//         id: comp.id || `${comp.type}-${Date.now()}`
-//       }))
-
-//       console.log('布局加载成功')
-//     }
-//   } catch (error) {
-//     console.error('加载布局失败:', error)
-//   }
-// }
-
-// // 初始化
-// onMounted(() => {
-//   loadLayout()
-// })
-
-
 </script>
 
 <style lang="scss" scoped>

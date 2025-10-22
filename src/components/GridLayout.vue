@@ -45,6 +45,7 @@ import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } fr
 import { COLUMNS } from '../utils/constant';
 import GridsterItem from './GridsterItem.vue';
 import AddComponent from './AddComponent.vue';
+import { Message } from '@arco-design/web-vue';
 
 import {
   reorganizeLayout,
@@ -153,10 +154,17 @@ const updateContainerInfo = () => {
 
   updateCellWidth()
 
-  // 如果容器尺寸发生变化，重新布局
-  if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
-    console.log('容器尺寸变化，重新布局')
+  // 只有当宽度或高度增加时，才进行重新布局
+  const widthIncreased = containerInfo.width > oldWidth
+  const heightIncreased = containerInfo.height > oldHeight
+  
+  if (widthIncreased || heightIncreased) {
+    console.log('容器尺寸增加，重新布局')
     reorganizeLayout(components.value, containerInfo, gridConfig)
+  } else if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
+    console.log('容器尺寸减小，保持原有布局')
+    // 尺寸减小时，只进行边界检查和调整，不重新布局
+    reorganizeLayout(components.value, containerInfo, gridConfig, false, true)
   }
 }
 
@@ -165,6 +173,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
   if (componentIndex === -1) return
 
   const component = components.value[componentIndex]!
+  
   const newSize: Size = {
     width: newData.width || component!.width,
     height: newData.height || component!.height
@@ -212,8 +221,8 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
       })
     }
 
-    // 最终重新布局确保一切正确（跳过自动填充，保持用户调整）
-    reorganizeLayout(components.value, containerInfo, gridConfig, true)
+    // 新的碰撞检测逻辑已经在validatePositionWithLayout中处理了布局调整
+    // 不需要额外的reorganizeLayout调用
   } else {
     // 可以尝试只调整尺寸不调整位置
     const fallbackResult = validatePositionWithLayout(
@@ -240,7 +249,8 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
         })
       }
 
-      reorganizeLayout(components.value, containerInfo, gridConfig, true)
+      // 新的碰撞检测逻辑已经在validatePositionWithLayout中处理了布局调整
+      // 不需要额外的reorganizeLayout调用
     }
   }
 }
@@ -281,32 +291,7 @@ const onDragOver = (e: DragEvent) => {
   }
 }
 
-const onDrop = (e: DragEvent) => {
-  console.log('drop')
-  e.preventDefault()
 
-  if (!gridContainer.value || !e.dataTransfer) return
-
-  const componentId = e.dataTransfer.getData('text/plain')
-  if (!componentId) return
-
-  const component = components.value.find(c => c.id === componentId)
-  if (!component) return
-
-  // 计算放置位置（直接使用像素坐标）
-  const rect = gridContainer.value.getBoundingClientRect()
-  const scrollTop = containerInfo.scrollTop || 0
-  const pixelX = e.clientX - rect.left - gridConfig.gap
-  const pixelY = e.clientY - rect.top - gridConfig.gap + scrollTop
-
-  const newPosition = snapToGrid({ x: pixelX, y: pixelY }, gridConfig)
-
-  if (validatePosition(components.value, componentId, newPosition, component, containerInfo, gridConfig)) {
-    component.x = newPosition.x
-    component.y = newPosition.y
-    reorganizeLayout(components.value, containerInfo, gridConfig, true)
-  }
-}
 
 // ResizeObserver 监听容器大小变化
 let resizeObserver: ResizeObserver | null = null
@@ -341,7 +326,6 @@ watch(
 const addComponentRef = ref()
 
 const openModal = () => {
-  console.log(addComponentRef.value)
   addComponentRef.value.open()
 }
 
@@ -388,7 +372,8 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
   })
 
   if (failedComponents.length > 0) {
-    alert(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
+    Message.warning(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
+    return
   }
 
   if (addedCount > 0) {

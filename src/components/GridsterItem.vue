@@ -123,7 +123,6 @@ const onDrag = (e: DragEvent) => {
   if (!isDragging.value) return
 
   // 计算实时拖拽位置
-  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
   const containerRect = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect()
 
   if (!containerRect) return
@@ -179,58 +178,92 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     // 根据手柄位置计算新的像素尺寸（简化逻辑，边缘调整不改变位置）
     switch (type) {
       case 'right':
-        // 右边缘：只改变宽度，从右侧扩展
+        // 右边缘：只改变宽度，从右侧扩展，左边缘保持不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
+        // 位置不变
         break
 
       case 'left':
-        // 左边缘：只改变宽度，位置不变
+        // 左边缘：改变宽度，从左侧变化，右边缘保持不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
+        // 调整位置以保持右边缘不变
+        newX = startXPos + startWidth - newWidth
         break
 
       case 'bottom':
-        // 下边缘：只改变高度，从下侧扩展
+        // 下边缘：只改变高度，从下侧扩展，上边缘保持不变
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        // 位置不变
         break
 
       case 'top':
+        // 上边缘：改变高度，从上侧变化，下边缘保持不变
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
-        newY = startYPos + newHeight
-        console.log(newY)
+        // 调整位置以保持下边缘不变
+        newY = startYPos + startHeight - newHeight
         break
 
       case 'top-right':
-        // 右上角：右侧扩展宽度，上侧调整高度
+        // 右上角：左侧和底部不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
+        // 调整Y位置以保持底部不变
+        newY = startYPos + startHeight - newHeight
+        // X位置不变（左侧不变）
         break
 
       case 'top-left':
-        // 左上角：左侧调整宽度，上侧调整高度
+        // 左上角：右侧和底部不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
+        // 调整位置以保持右侧和底部不变
+        newX = startXPos + startWidth - newWidth
+        newY = startYPos + startHeight - newHeight
         break
 
       case 'bottom-left':
-        // 左下角：左侧调整宽度，下侧扩展高度
+        // 左下角：右侧和上侧不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        // 调整X位置以保持右侧不变
+        newX = startXPos + startWidth - newWidth
+        // Y位置不变（上侧不变）
         break
 
       case 'bottom-right':
-        // 右下角：右侧扩展宽度，下侧扩展高度
+        // 右下角：左侧和上侧不变
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        // 位置不变（左侧和上侧不变）
         break
     }
 
     // 边界检查：确保组件不超出容器
+    // 确保位置不为负数
+    newX = Math.max(0, newX)
+    newY = Math.max(0, newY)
+    
+    // 确保组件不超出容器右边界和下边界
     if (newX + newWidth > containerWidth) {
-      newWidth = containerWidth - newX
+      if (type.includes('left')) {
+        // 如果是从左侧调整，调整位置而不是宽度
+        newX = containerWidth - newWidth
+        newX = Math.max(0, newX)
+      } else {
+        // 如果是从右侧调整，调整宽度
+        newWidth = containerWidth - newX
+      }
     }
     
     if (newY + newHeight > containerHeight) {
-      newHeight = containerHeight - newY
+      if (type.includes('top')) {
+        // 如果是从上侧调整，调整位置而不是高度
+        newY = containerHeight - newHeight
+        newY = Math.max(0, newY)
+      } else {
+        // 如果是从下侧调整，调整高度
+        newHeight = containerHeight - newY
+      }
     }
 
     // 确保最小尺寸
@@ -256,21 +289,16 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     // 填充后的边界检查
     if (newX + filledSize.width > containerWidth) {
       filledSize.width = containerWidth - newX
-      console.log(`填充后右边界限制: 宽度调整为 ${filledSize.width.toFixed(1)}`)
     }
 
     // 高度边界检查（填充不会改变高度）
     if (newY + filledSize.height > containerHeight) {
       filledSize.height = containerHeight - newY
-      console.log(`高度边界限制: 高度调整为 ${filledSize.height.toFixed(1)}`)
     }
 
     // 确保最终尺寸不小于最小值
     filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
     filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
-
-    console.log(`最终尺寸: ${filledSize.width.toFixed(1)}×${filledSize.height.toFixed(1)}`)
-    console.log(`最终位置: (${newX.toFixed(1)}, ${newY.toFixed(1)})`)
 
     // 发射 resize 事件
     emit('resize', props.component.id, {
