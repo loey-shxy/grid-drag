@@ -14,8 +14,6 @@
       class="grid-content"
       :style="gridStyle"
       @dragover="onDragOver"
-      @drop="onDrop"
-      @scroll="onScroll"
     >
       <!-- 网格背景 -->
       <div 
@@ -61,7 +59,7 @@ import {
   snapToGrid, 
   calculateAvailableSpace,
   canAddComponent,
-  autoFillComponent,
+  autoFillComponentToGrid,
   resizeComponentWithAutoFill,
   validatePositionWithLayout,
 } from '../utils/grid';
@@ -159,15 +157,9 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
   let addedCount = 0
   const failedComponents: string[] = []
   
-  console.log('=== 开始添加组件 ===')
-  console.log('容器尺寸:', containerInfo.width, '×', containerInfo.height)
-  
   selectedComponents.forEach(comp => {
-    console.log(`尝试添加组件: ${comp.name} (${comp.width}×${comp.height})`)
-    
     // 提前检查是否可以添加
     if (!canAddComponent(components.value, comp, containerInfo, gridConfig)) {
-      console.warn(`组件 ${comp.name} 无法添加，会导致布局超出容器`)
       failedComponents.push(comp.name)
       return
     }
@@ -182,7 +174,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
       }
       
       // 确保组件尺寸正确
-      autoFillComponent(newComponent, gridConfig)
+      autoFillComponentToGrid(newComponent, gridConfig.cellWidth, gridConfig.gap)
       
       // 临时添加并重新布局
       const tempComponents = [...components.value, newComponent]
@@ -201,8 +193,6 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
       failedComponents.push(comp.name)
     }
   })
-  
-  console.log(`添加结果: 成功 ${addedCount} 个, 失败 ${failedComponents.length} 个`)
   
   if (failedComponents.length > 0) {
     alert(`以下组件无法添加（空间不足）：\n${failedComponents.join('\n')}`)
@@ -236,7 +226,7 @@ const updateContainerInfo = () => {
   }
 }
 
-const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
+const onComponentResize = (id: string, newData: Size & Partial<Position> & { resizeType?: string }) => {
   const componentIndex = components.value.findIndex(c => c.id === id)
   if (componentIndex === -1) return
   
@@ -251,8 +241,15 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
     y: newData.y !== undefined ? newData.y : component!.y
   }
   
-  // 应用自动填充
-  const filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
+  // 根据调整类型决定是否应用自动填充
+  let filledSize = newSize
+  const resizeType = newData.resizeType || ''
+  const isWidthResize = ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(resizeType)
+  
+  if (isWidthResize) {
+    // 只有在调整宽度相关的操作时才进行栅格填充
+    filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig, containerInfo.width)
+  }
   
     // 使用智能验证（考虑动态布局）
   const validationResult = validatePositionWithLayout(
@@ -272,34 +269,31 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
 
     // 更新受影响的组件
     if (validationResult.affectedComponents.length > 0) {
-      console.log(`需要更新 ${validationResult.affectedComponents.length} 个受影响组件`)
       validationResult.affectedComponents.forEach(affectedComp => {
         const targetComp = components.value.find(c => c.id === affectedComp.id)
         if (targetComp) {
-          console.log(`更新受影响组件 ${targetComp.name}: 位置(${affectedComp.x}, ${affectedComp.y})`)
           targetComp.x = affectedComp.x
           targetComp.y = affectedComp.y
         }
       })
     }
 
-    // 最终重新布局确保一切正确
-    reorganizeLayout(components.value, containerInfo, gridConfig)
+    // 最终重新布局确保一切正确（跳过自动填充，保持用户调整）
+    reorganizeLayout(components.value, containerInfo, gridConfig, true)
   } else {
      // 可以尝试只调整尺寸不调整位置
     const fallbackResult = validatePositionWithLayout(
       components.value,
       id,
       { x: component.x, y: component.y }, // 保持原位置
-      newSize, // 只调整尺寸
+      filledSize, // 使用填充后的尺寸
       containerInfo,
       gridConfig
     )
 
     if (fallbackResult.valid) {
-      console.log('✓ 回退方案：只调整尺寸，位置保持不变')
-      component.width = newSize.width
-      component.height = newSize.height
+      component.width = filledSize.width
+      component.height = filledSize.height
       
       // 更新受影响的组件
       if (fallbackResult.affectedComponents.length > 0) {
@@ -312,23 +306,23 @@ const onComponentResize = (id: string, newData: Size & Partial<Position>) => {
         })
       }
       
-      reorganizeLayout(components.value, containerInfo, gridConfig)
+      reorganizeLayout(components.value, containerInfo, gridConfig, true)
     }
   }
 }
 
 // 组件拖拽
 const onComponentDrag = (id: string, newPosition: Position) => {
+  console.log(`output->id`,id)
   const component = components.value.find(c => c.id === id)
   if (!component) return
   
   // 吸附到网格
   const snappedPosition = snapToGrid(newPosition, gridConfig)
-  
   if (validatePosition(components.value, id, snappedPosition, component, containerInfo, gridConfig)) {
     component.x = snappedPosition.x
     component.y = snappedPosition.y
-    reorganizeLayout(components.value, containerInfo, gridConfig)
+    reorganizeLayout(components.value, containerInfo, gridConfig, true)
   }
 }
 
@@ -355,6 +349,7 @@ const onDragOver = (e: DragEvent) => {
 }
 
 const onDrop = (e: DragEvent) => {
+  console.log('drop')
   e.preventDefault()
   
   if (!gridContainer.value || !e.dataTransfer) return
@@ -374,8 +369,9 @@ const onDrop = (e: DragEvent) => {
   const newPosition = snapToGrid({ x: pixelX, y: pixelY }, gridConfig)
   
   if (validatePosition(components.value, componentId, newPosition, component, containerInfo, gridConfig)) {
-    Object.assign(component, newPosition)
-    reorganizeLayout(components.value, containerInfo, gridConfig)
+    component.x = newPosition.x
+    component.y = newPosition.y
+    reorganizeLayout(components.value, containerInfo, gridConfig, true)
   }
 }
 

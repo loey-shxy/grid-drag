@@ -1,12 +1,6 @@
 <template>
-  <div
-    class="component-item"
-    :class="{ resizing: isResizing }"
-    :style="componentStyle"
-    draggable="true"
-    @dragstart="onDragStart"
-    @dragend="onDragEnd"
-  >
+  <div class="component-item" :class="{ resizing: isResizing }" :style="componentStyle" draggable="true"
+    @dragstart="onDragStart" @drag="onDrag" @dragend="onDragEnd">
     <div class="component-content">
       <div class="component-header">
         <span class="component-name">{{ component.name }}</span>
@@ -17,7 +11,7 @@
       </div>
     </div>
     <icon-delete :size="16" class="remove-btn" @click="$emit('remove', component.id)" />
-    
+
     <!-- 调整手柄 -->
     <div class="resize-overlay">
       <div class="edge top" @mousedown="onEdgeMouseDown('top', $event)"></div>
@@ -45,7 +39,7 @@ interface Props {
 
 const props = defineProps<Props>()
 const emit = defineEmits<{
-  resize: [id: string, size: Size & Partial<Position>]
+  resize: [id: string, size: Size & Partial<Position> & { resizeType?: string }]
   drag: [id: string, position: Position]
   remove: [id: string]
 }>()
@@ -53,6 +47,8 @@ const emit = defineEmits<{
 const isDragging = ref(false)
 const isResizing = ref(false)
 const currentResizeType = ref<string>('') // 'edge' or 'corner' + direction
+const dragStartPosition = ref<Position>({ x: 0, y: 0 })
+const dragOffset = ref<Position>({ x: 0, y: 0 })
 
 // 计算组件样式
 const componentStyle = computed((): any => {
@@ -62,7 +58,6 @@ const componentStyle = computed((): any => {
     top: `${props.component.y}px`,
     width: `${props.component.width}px`,
     height: `${props.component.height}px`,
-    transform: isDragging.value ? 'scale(1.02)' : 'none',
     zIndex: isDragging.value || isResizing.value ? 100 : 1,
     cursor: isResizing.value ? getResizeCursor(currentResizeType.value) : 'move'
   }
@@ -87,7 +82,7 @@ const getResizeCursor = (type: string) => {
 const onEdgeMouseDown = (edge: string, e: MouseEvent) => {
   e.preventDefault()
   e.stopPropagation()
-  
+
   onResizeStart(edge, e)
 }
 
@@ -95,7 +90,7 @@ const onEdgeMouseDown = (edge: string, e: MouseEvent) => {
 const onCornerMouseDown = (corner: string, e: MouseEvent) => {
   e.preventDefault()
   e.stopPropagation()
-  
+
   onResizeStart(corner, e)
 }
 
@@ -108,24 +103,57 @@ const onDragStart = (e: DragEvent) => {
   // 设置拖拽预览
   const dragImage = e.currentTarget as HTMLElement
   e.dataTransfer?.setDragImage(dragImage, 0, 0)
+
+
+  // 记录拖拽起始位置和鼠标偏移
+  const rect = dragImage.getBoundingClientRect()
+  dragStartPosition.value = {
+    x: props.component.x,
+    y: props.component.y
+  }
+  dragOffset.value = {
+    x: e.clientX - rect.left,
+    y: e.clientY - rect.top
+  }
 }
+
+// 添加拖拽过程中的实时位置更新
+const onDrag = (e: DragEvent) => {
+  if (!isDragging.value) return
+
+  // 计算实时拖拽位置
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  const containerRect = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect()
+
+  if (!containerRect) return
+
+  // 计算在容器内的位置
+  const pixelX = e.clientX - containerRect.left - dragOffset.value.x
+  const pixelY = e.clientY - containerRect.top - dragOffset.value.y
+
+  // 发射 drag 事件，让父组件处理位置更新
+  emit('drag', props.component.id, { x: pixelX, y: pixelY })
+}
+
 
 const onDragEnd = () => {
   isDragging.value = false
+  dragStartPosition.value = { x: 0, y: 0 }
+  dragOffset.value = { x: 0, y: 0 }
 }
 
 // 调整大小（像素计算）
 const onResizeStart = (type: string, e: MouseEvent) => {
   e.preventDefault()
   e.stopPropagation()
-  
+
   const startX = e.clientX
   const startY = e.clientY
   const startWidth = props.component.width
   const startHeight = props.component.height
   const startXPos = props.component.x
   const startYPos = props.component.y
-  
+
   const containerWidth = props.containerInfo.width
   const containerHeight = props.containerInfo.height
 
@@ -141,62 +169,62 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
     const deltaX = moveEvent.clientX - startX
     const deltaY = moveEvent.clientY - startY
-    
+
     let newWidth = startWidth
     let newHeight = startHeight
     let newX = startXPos
     let newY = startYPos
-    
+
     // 根据手柄位置计算新的像素尺寸
     switch (type) {
       case 'right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         break
-        
+
       case 'left':
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newX = Math.max(0, startXPos + deltaX)
         break
-        
+
       case 'bottom':
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         break
-        
+
       case 'top':
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         newY = Math.max(0, startYPos + deltaY)
         break
-        
+
       case 'top-right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         newY = Math.max(0, startYPos + deltaY)
         break
-        
+
       case 'top-left':
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         newX = Math.max(0, startXPos + deltaX)
         newY = Math.max(0, startYPos + deltaY)
         break
-        
+
       case 'bottom-left':
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         newX = Math.max(0, startXPos + deltaX)
 
-         // 允许调整到容器底部
+        // 允许调整到容器底部
         if (newY + newHeight > containerHeight) {
           newHeight = containerHeight - newY
         }
 
         break
-        
+
       case 'bottom-right':
         newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
 
-         // 允许调整到容器底部
+        // 允许调整到容器底部
         if (newY + newHeight > containerHeight) {
           newHeight = containerHeight - newY
         }
@@ -207,54 +235,64 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     if (newX + newWidth > containerWidth) {
       newWidth = containerWidth - newX
     }
-     // 边界检查 - 高度（顶部调整已经在switch中处理）
+    // 边界检查 - 高度（顶部调整已经在switch中处理）
     if (type !== 'top' && type !== 'top-left' && type !== 'top-right') {
       if (newY + newHeight > containerHeight) {
         newHeight = containerHeight - newY
       }
     }
 
-     // 确保最小尺寸
+    // 确保最小尺寸
     newWidth = Math.max(props.component.minWidth || 100, newWidth)
     newHeight = Math.max(props.component.minHeight || 60, newHeight)
-    
+
     console.log(`调整后原始尺寸: ${newWidth.toFixed(1)}×${newHeight.toFixed(1)}`)
-    
-    // 应用自动填充（只对宽度）
-    const filledSize = resizeComponentWithAutoFill(
-      props.component, 
-      { width: newWidth, height: newHeight }, 
-      props.gridConfig
-    )
-    
+
+    // 根据调整类型决定是否应用自动填充
+    let filledSize = { width: newWidth, height: newHeight }
+
+    // 只有在调整宽度相关的操作时才进行栅格填充
+    const isWidthResize = ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(type)
+
+    if (isWidthResize) {
+      // 应用自动填充（只对宽度）
+      filledSize = resizeComponentWithAutoFill(
+        props.component,
+        { width: newWidth, height: newHeight },
+        props.gridConfig,
+        props.containerInfo.width
+      )
+    }
+
     // 边界检查（填充后）- 只检查宽度
     if (newX + filledSize.width > containerWidth) {
       filledSize.width = containerWidth - newX
       console.log(`填充后右边界限制: 宽度调整为 ${filledSize.width.toFixed(1)}`)
     }
-    
+
     // 高度边界检查（填充不会改变高度，所以使用原始高度）
     if (newY + filledSize.height > containerHeight) {
       filledSize.height = containerHeight - newY
       console.log(`高度边界限制: 高度调整为 ${filledSize.height.toFixed(1)}`)
     }
 
-     // 确保最终尺寸不小于最小值
+    // 确保最终尺寸不小于最小值
     filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
     filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
-    
+
     console.log(`最终尺寸: ${filledSize.width.toFixed(1)}×${filledSize.height.toFixed(1)}`)
     console.log(`最终位置: (${newX.toFixed(1)}, ${newY.toFixed(1)})`)
-    
+
     // 发射 resize 事件
     emit('resize', props.component.id, {
-      width: Math.round(filledSize.width),
-      height: Math.round(filledSize.height),
-      x: Math.round(newX),
-      y: Math.round(newY)
+      width: parseFloat(filledSize.width.toFixed(2)),
+      height: parseFloat(filledSize.height.toFixed(2)),
+      x: parseFloat(newX.toFixed(2)),
+      y: parseFloat(newY.toFixed(2)),
+      resizeType: type
     })
   }
-  
+
   const onMouseUp = () => {
     document.removeEventListener('mousemove', onMouseMove)
     document.removeEventListener('mouseup', onMouseUp)
@@ -262,7 +300,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     isResizing.value = false
     currentResizeType.value = ''
   }
-  
+
   document.addEventListener('mousemove', onMouseMove)
   document.addEventListener('mouseup', onMouseUp)
   document.addEventListener('mouseleave', onMouseUp) // 鼠标离开窗口时也结束
@@ -295,9 +333,11 @@ const getComponentDescription = (type: string) => {
   position: relative;
   cursor: move;
   transition: all 0.2s ease;
-  min-height: 0; /* 允许收缩 */
-  min-width: 0;  /* 允许收缩 */
-  
+  min-height: 0;
+  /* 允许收缩 */
+  min-width: 0;
+  /* 允许收缩 */
+
   &:hover {
     border-color: #007bff;
     box-shadow: 0 4px 12px rgba(0, 123, 255, 0.15);
@@ -306,7 +346,7 @@ const getComponentDescription = (type: string) => {
   &:active {
     transform: scale(0.98);
   }
-  
+
   .component-content {
     padding: 12px;
     height: 100%;
@@ -463,5 +503,4 @@ const getComponentDescription = (type: string) => {
 .component-item:hover .remove-btn {
   opacity: 1;
 }
-
 </style>

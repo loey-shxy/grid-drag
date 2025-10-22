@@ -100,7 +100,7 @@ const componentLibrary = ref<ComponentItemModel[]>([
     width: 300,   // 像素
     height: 300,  // 像素
     minWidth: 200,
-    minHeight: 20,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
@@ -122,7 +122,7 @@ const componentLibrary = ref<ComponentItemModel[]>([
     width: 300,   // 像素
     height: 300,  // 像素
     minWidth: 200,
-    minHeight: 20,
+    minHeight: 200,
     id: useId(),
     x: 0,
     y: 0
