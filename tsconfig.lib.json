@@ -1,0 +1,21 @@
+{
+  "extends": "@vue/tsconfig/tsconfig.dom.json",
+  "include": [
+    "packages/src/**/*",
+    "packages/src/**/*.vue"
+  ],
+  "exclude": [
+    "src/**/*",
+    "node_modules"
+  ],
+  "compilerOptions": {
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./packages/src/*"]
+    },
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "./lib",
+    "skipLibCheck": true
+  }
+}
