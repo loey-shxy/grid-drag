@@ -350,13 +350,13 @@ function handleRightExpansion(
   // 找到所有与调整后组件有垂直重叠且在右侧的组件
   const rightComponents = components.filter(comp => {
     if (comp.id === resizingComponent.id) return false
-    
+
     // 检查垂直重叠
     const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y || comp.y + comp.height <= resizedComponent.y)
-    
+
     // 检查是否在右侧（原始位置的右侧）
     const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width - gap
-    
+
     return verticalOverlap && isOnRight
   })
 
@@ -389,11 +389,11 @@ function handleRightExpansion(
   // 需要推动右侧组件
   const componentsToMove: ComponentItemModel[] = []
   const componentsToWrap: ComponentItemModel[] = [] // 需要换行的组件
-  
+
   // 首先确定哪些组件需要换行
   for (const comp of rightComponents) {
     const newX = comp.x + pushDistance
-    
+
     // 检查是否超出容器右边界
     if (newX + comp.width > containerWidth) {
       componentsToWrap.push(comp)
@@ -402,7 +402,7 @@ function handleRightExpansion(
       componentsToMove.push({ ...comp, x: newX, y: comp.y })
     }
   }
-  
+
   // 处理需要换行的组件，确保它们不重叠
   if (componentsToWrap.length > 0) {
     // 创建包含调整后组件和已移动组件的临时列表
@@ -411,28 +411,39 @@ function handleRightExpansion(
       resizedComponent,
       ...componentsToMove
     ]
-    
+
     // 按X坐标排序需要换行的组件，确保从左到右处理
     componentsToWrap.sort((a, b) => a.x - b.x)
-    
+
     for (const comp of componentsToWrap) {
-      // 为每个需要换行的组件找到正下方的位置
+      // 尝试为每个需要换行的组件找到正下方的位置
       const newY = findPositionBelowComponent(allComponents, comp, containerInfo, gridConfig)
-      
+
       // 检查是否超出容器底部
       if (newY + comp.height > containerHeight) {
-        return { affected: [], canResize: false } // 无法调整
+        // 无法换行到下方，将组件推到容器最右侧
+        const rightmostX = containerWidth - comp.width
+
+        // 推到最右侧，保持原来的Y坐标
+        const movedComponent = { ...comp, x: rightmostX, y: comp.y }
+        componentsToMove.push(movedComponent)
+
+        // 将移动后的组件添加到临时列表中，供后续组件计算位置时参考
+        allComponents.push(movedComponent)
+
+        // 组件被推到最右侧，阻止调整宽度操作
+        return { affected: [], canResize: false }
+      } else {
+        // 可以换行到下方
+        const movedComponent = { ...comp, x: comp.x, y: newY }
+        componentsToMove.push(movedComponent)
+
+        // 将移动后的组件添加到临时列表中，供后续组件计算位置时参考
+        allComponents.push(movedComponent)
       }
-      
-      // 创建移动后的组件
-      const movedComponent = { ...comp, x: comp.x, y: newY }
-      componentsToMove.push(movedComponent)
-      
-      // 将移动后的组件添加到临时列表中，供后续组件计算位置时参考
-      allComponents.push(movedComponent)
     }
   }
-  
+
   affected.push(...componentsToMove)
   return { affected, canResize: true }
 }
@@ -462,13 +473,13 @@ function handleBottomExpansion(
   // 找到所有与调整后组件有水平重叠且在下方的组件
   const bottomComponents = components.filter(comp => {
     if (comp.id === resizingComponent.id) return false
-    
+
     // 检查水平重叠
     const horizontalOverlap = !(resizedComponent.x + resizedComponent.width <= comp.x || comp.x + comp.width <= resizedComponent.x)
-    
+
     // 检查是否在下方（原始位置的下方，考虑gap）
     const isBelow = comp.y >= resizingComponent.y + resizingComponent.height - gap
-    
+
     return horizontalOverlap && isBelow
   })
 
@@ -501,12 +512,12 @@ function handleBottomExpansion(
   // 需要推动下方组件
   for (const comp of bottomComponents) {
     const newY = comp.y + pushDistance
-    
+
     // 检查是否超出容器底部
     if (newY + comp.height > containerHeight) {
       return { affected: [], canResize: false } // 无法调整
     }
-    
+
     affected.push({ ...comp, x: comp.x, y: newY })
   }
 
@@ -521,33 +532,33 @@ function findPositionBelowComponent(
   gridConfig: GridConfig
 ): number {
   const { gap } = gridConfig
-  
+
   // 从组件底部开始查找
   let targetY = component.y + component.height + gap
-  
+
   // 找到与当前组件有水平重叠的所有组件
   const overlappingComponents = components.filter(comp => {
     if (comp.id === component.id) return false
-    
+
     // 检查是否有水平重叠（使用组件的原始X位置）
     const horizontalOverlap = !(component.x + component.width <= comp.x || comp.x + comp.width <= component.x)
-    
+
     return horizontalOverlap
   })
-  
+
   // 按Y坐标排序
   overlappingComponents.sort((a, b) => a.y - b.y)
-  
+
   // 持续检查直到找到合适的位置
   let foundPosition = false
   while (!foundPosition) {
     foundPosition = true
-    
+
     // 检查在targetY位置是否与任何组件重叠
     for (const comp of overlappingComponents) {
       // 检查垂直重叠
       const verticalOverlap = !(targetY + component.height <= comp.y || comp.y + comp.height <= targetY)
-      
+
       if (verticalOverlap) {
         // 有重叠，需要移到这个组件下方
         targetY = comp.y + comp.height + gap
@@ -556,8 +567,63 @@ function findPositionBelowComponent(
       }
     }
   }
-  
+
   return targetY
+}
+
+// 智能处理右下角扩展时的碰撞（同时向右和向下）
+function handleBottomRightExpansion(
+  components: ComponentItemModel[],
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): { affected: ComponentItemModel[]; canResize: boolean } {
+  // 先处理向右扩展
+  const rightResult = handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+
+  if (!rightResult.canResize) {
+    return rightResult
+  }
+
+  // 创建包含右侧移动后组件的临时列表
+  const tempComponents = components.map(comp => {
+    const affectedComp = rightResult.affected.find(ac => ac.id === comp.id)
+    return affectedComp ? { ...comp, x: affectedComp.x, y: affectedComp.y } : comp
+  })
+
+  // 在临时列表基础上处理向下扩展
+  const bottomResult = handleBottomExpansion(tempComponents, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+
+  if (!bottomResult.canResize) {
+    return bottomResult
+  }
+
+  // 合并两个方向的影响组件
+  const allAffected: ComponentItemModel[] = []
+  const affectedIds = new Set<string>()
+
+  // 添加右侧移动的组件
+  for (const comp of rightResult.affected) {
+    allAffected.push(comp)
+    affectedIds.add(comp.id)
+  }
+
+  // 添加向下移动的组件（避免重复）
+  for (const comp of bottomResult.affected) {
+    if (!affectedIds.has(comp.id)) {
+      allAffected.push(comp)
+    } else {
+      // 如果组件既需要右移又需要下移，更新其位置
+      const existingComp = allAffected.find(ac => ac.id === comp.id)
+      if (existingComp) {
+        existingComp.y = comp.y // 更新Y坐标
+      }
+    }
+  }
+
+  return { affected: allAffected, canResize: true }
 }
 
 // 检查调整大小是否会影响其他组件，并返回需要更新的组件
@@ -603,7 +669,31 @@ export function getAffectedComponents(
   }
 
   // 根据调整类型选择处理方式
-  if (widthIncreased && (resizeType === 'right' || resizeType?.includes('right'))) {
+  if (resizeType === 'bottom-right' && widthIncreased && heightIncreased) {
+    // 右下角调整：同时向右和向下扩展
+    return handleBottomRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+  } else if (resizeType === 'top-right' && widthIncreased && positionChanged) {
+    // 右上角调整：向右扩展宽度，位置可能改变
+    if (heightIncreased) {
+      // 如果高度也增加，先处理向右扩展
+      return handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+    } else {
+      // 只是位置改变，检查重叠
+      return { affected: [], canResize: !hasAnyOverlap(components, resizingComponent, newPosition, newSize) }
+    }
+  } else if (resizeType === 'bottom-left' && heightIncreased && positionChanged) {
+    // 左下角调整：向下扩展高度，位置可能改变
+    if (widthIncreased) {
+      // 如果宽度也增加，先处理向下扩展
+      return handleBottomExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+    } else {
+      // 只是位置改变，检查重叠
+      return { affected: [], canResize: !hasAnyOverlap(components, resizingComponent, newPosition, newSize) }
+    }
+  } else if (resizeType === 'top-left' && positionChanged) {
+    // 左上角调整：位置改变，检查重叠
+    return { affected: [], canResize: !hasAnyOverlap(components, resizingComponent, newPosition, newSize) }
+  } else if (widthIncreased && (resizeType === 'right' || resizeType?.includes('right'))) {
     // 向右扩展宽度
     return handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
   } else if (heightIncreased && (resizeType === 'bottom' || resizeType?.includes('bottom'))) {
@@ -685,6 +775,37 @@ function hasOverlap(
   const overlapX = pos1.x < pos2.x + size2.width && pos1.x + size1.width > pos2.x
   const overlapY = pos1.y < pos2.y + size2.height && pos1.y + size1.height > pos2.y
   return overlapX && overlapY
+}
+
+// 检查调整后的组件是否与任何其他组件重叠
+function hasAnyOverlap(
+  components: ComponentItemModel[],
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size
+): boolean {
+  const resizedComponent = {
+    ...resizingComponent,
+    x: newPosition.x,
+    y: newPosition.y,
+    width: newSize.width,
+    height: newSize.height
+  }
+
+  for (const otherComponent of components) {
+    if (otherComponent.id === resizingComponent.id) continue
+
+    if (hasOverlap(
+      { x: resizedComponent.x, y: resizedComponent.y },
+      { width: resizedComponent.width, height: resizedComponent.height },
+      { x: otherComponent.x, y: otherComponent.y },
+      { width: otherComponent.width, height: otherComponent.height }
+    )) {
+      return true
+    }
+  }
+
+  return false
 }
 
 // 智能验证拖拽位置（严格防止重叠）
