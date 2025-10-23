@@ -16,6 +16,10 @@
     "declaration": true,
     "emitDeclarationOnly": true,
     "outDir": "./lib",
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": false,
+    "isolatedModules": true,
+    "noEmit": false
   }
 }

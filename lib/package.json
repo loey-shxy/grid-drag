@@ -1,0 +1,49 @@
+{
+  "name": "grid-drag",
+  "version": "1.0.0",
+  "description": "A Vue 3 drag-and-drop grid component library",
+  "main": "index.umd.js",
+  "module": "index.es.js",
+  "types": "index.d.ts",
+  "files": [
+    "index.es.js",
+    "index.es.js.map",
+    "index.umd.js",
+    "index.umd.js.map",
+    "style.css",
+    "index.d.ts",
+    "components/",
+    "types/",
+    "utils/"
+  ],
+  "exports": {
+    ".": {
+      "import": "./index.es.js",
+      "require": "./index.umd.js",
+      "types": "./index.d.ts"
+    },
+    "./style.css": "./style.css"
+  },
+  "keywords": [
+    "vue",
+    "vue3",
+    "drag",
+    "drop",
+    "grid",
+    "component",
+    "ui"
+  ],
+  "author": "",
+  "license": "MIT",
+  "peerDependencies": {
+    "vue": "^3.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": ""
+  },
+  "homepage": "",
+  "bugs": {
+    "url": ""
+  }
+}

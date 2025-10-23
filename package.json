@@ -1,14 +1,13 @@
 {
   "name": "grid-drag",
-  "private": true,
   "version": "1.0.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
     "build": "vue-tsc -b && vite build",
     "preview": "vite preview",
-    "build:lib": "vite build --config vite.lib.config.ts && npm run build:types",
-    "build:types": "echo 'Types already created manually'"
+    "build:lib": "node scripts/build-lib.js && npm run build:types",
+    "build:types": "echo 'TypeScript declarations generated automatically'"
   },
   "dependencies": {
     "sass": "^1.93.2",
