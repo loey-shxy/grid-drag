@@ -281,8 +281,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
       filledSize = resizeComponentWithAutoFill(
         props.component,
         { width: newWidth, height: newHeight },
-        props.gridConfig,
-        props.containerInfo.width
+        props.gridConfig
       )
     }
 

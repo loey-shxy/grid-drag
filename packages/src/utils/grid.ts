@@ -68,44 +68,6 @@ function shouldTriggerLayout(
   return false;
 }
 
-
-
-// 检查位置是否可用
-export const validatePosition = (
-  components: ComponentItemModel[],
-  currentId: string,
-  position: Position,
-  size: Size,
-  containerInfo: ContainerInfo,
-  _gridConfig: GridConfig
-): boolean => {
-  const { width: containerWidth, height: containerHeight } = containerInfo
-
-  // 检查边界
-  if (position.x < 0 ||
-    position.y < 0 ||
-    position.x + size.width > containerWidth ||
-    position.y + size.height > containerHeight) {
-    return false
-  }
-
-
-  // 检查与其他组件的重叠
-  for (const comp of components) {
-    if (comp.id === currentId) continue
-
-    // 计算重叠区域
-    const overlapX = position.x < comp.x + comp.width && position.x + size.width > comp.x
-    const overlapY = position.y < comp.y + comp.height && position.y + size.height > comp.y
-
-    if (overlapX && overlapY) {
-      return false
-    }
-  }
-
-  return true
-}
-
 // 查找可用位置（不重新布局，自动向后排列）
 export function findAvailablePosition(
   components: ComponentItemModel[],
@@ -114,16 +76,14 @@ export function findAvailablePosition(
   gridConfig: GridConfig
 ): Position | null {
   const { width: containerWidth, height: containerHeight } = containerInfo
-  const { gap } = gridConfig
+  const { gap, cellWidth } = gridConfig
 
-  // 计算每列的宽度（24列固定）
-  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
 
-  console.log(`🔍 查找位置 - 容器宽度: ${containerWidth}, 列宽: ${columnWidth}, 间距: ${gap}`)
+  console.log(`🔍 查找位置 - 容器宽度: ${containerWidth}, 列宽: ${cellWidth}, 间距: ${gap}`)
   console.log(`📦 原始组件: ${newComponent.name}, 宽度: ${newComponent.width}, 高度: ${newComponent.height}`)
 
   // 首先对组件进行自动填充
-  autoFillComponentToGrid(newComponent, columnWidth, gap)
+  autoFillComponentToGrid(newComponent, gridConfig)
 
   console.log(`📦 填充后组件: ${newComponent.name}, 宽度: ${newComponent.width}, 高度: ${newComponent.height}`)
 
@@ -134,7 +94,7 @@ export function findAvailablePosition(
   }
 
   // 计算组件占用的列数（组件宽度已经包含了间距，不需要再加gap）
-  const spanCols = Math.ceil(newComponent.width / (columnWidth + gap))
+  const spanCols = Math.ceil(newComponent.width / (cellWidth + gap))
   const actualSpanCols = Math.min(spanCols, COLUMNS)
 
   console.log(`📏 组件占用列数: ${spanCols} -> ${actualSpanCols}`)
@@ -145,9 +105,9 @@ export function findAvailablePosition(
   // 根据现有组件更新列高度
   for (const comp of components) {
     // 计算组件起始列：x坐标除以(列宽+间距)
-    const startCol = Math.floor(comp.x / (columnWidth + gap))
+    const startCol = Math.floor(comp.x / (cellWidth + gap))
     // 计算组件占用的列数（组件宽度已经包含了间距）
-    const compSpanCols = Math.ceil(comp.width / (columnWidth + gap))
+    const compSpanCols = Math.ceil(comp.width / (cellWidth + gap))
     const endCol = Math.min(startCol + compSpanCols, COLUMNS)
     const compBottomY = comp.y + comp.height + gap
 
@@ -180,7 +140,7 @@ export function findAvailablePosition(
   }
 
   // 计算实际位置：列索引 * (列宽 + 间距)
-  const newX = bestStartCol * (columnWidth + gap)
+  const newX = bestStartCol * (cellWidth + gap)
   const newY = minHeight
 
   console.log(`🎯 最佳位置: 列${bestStartCol}, 高度${minHeight} -> 坐标(${newX}, ${newY})`)
@@ -208,136 +168,6 @@ export function findAvailablePosition(
   }
 
   return newPosition
-}
-
-
-// 检查是否可以添加组件（提前验证）
-export function canAddComponent(
-  components: ComponentItemModel[],
-  newComponent: ComponentItemModel,
-  containerInfo: ContainerInfo,
-  gridConfig: GridConfig
-): boolean {
-  const testComponents = [...components, { ...newComponent, x: 0, y: 0 }]
-  return reorganizeLayout(testComponents, containerInfo, gridConfig)
-}
-
-// 计算可用空间
-export function calculateAvailableSpace(
-  components: ComponentItemModel[],
-  containerInfo: ContainerInfo,
-  _gridConfig: GridConfig
-) {
-  const usedArea = components.reduce((total, comp) => {
-    return total + (comp.width * comp.height)
-  }, 0)
-
-  const totalArea = containerInfo.width * containerInfo.height
-
-  return {
-    usedArea,
-    totalArea,
-    availableArea: totalArea - usedArea,
-    utilization: ((usedArea / totalArea) * 100).toFixed(1) + '%'
-  }
-}
-
-// 吸附到网格（吸附到最近的栅格格子）
-export function snapToGrid(position: Position, gridConfig: GridConfig): Position {
-  const { cellWidth, cellHeight, gap } = gridConfig
-  const unitWidth = cellWidth + gap
-  const unitHeight = cellHeight + gap
-
-  // 计算最近的网格位置
-  const nearestGridX = Math.round(position.x / unitWidth) * unitWidth
-  const nearestGridY = Math.round(position.y / unitHeight) * unitHeight
-
-  return {
-    x: parseFloat(nearestGridX.toFixed(2)),
-    y: parseFloat(nearestGridY.toFixed(2))
-  }
-}
-
-// 基于24列栅格系统的智能吸附
-export function snapToColumnGrid(
-  position: Position,
-  containerInfo: ContainerInfo,
-  gridConfig: GridConfig
-): Position {
-  const { width: containerWidth } = containerInfo
-  const { gap, cellHeight } = gridConfig
-
-  // 计算每列的宽度（24列固定）
-  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
-  const unitWidth = columnWidth + gap
-  const unitHeight = cellHeight + gap
-
-  // 计算最近的列位置
-  let nearestColumn = Math.round(position.x / unitWidth)
-
-  // 确保列索引在有效范围内
-  nearestColumn = Math.max(0, Math.min(nearestColumn, COLUMNS - 1))
-
-  // 计算吸附后的X坐标：列索引 * (列宽 + 间距)
-  const snappedX = nearestColumn * unitWidth
-
-  // 计算最近的行位置
-  let nearestRow = Math.round(position.y / unitHeight)
-
-  // 确保行索引不为负数
-  nearestRow = Math.max(0, nearestRow)
-
-  // 计算吸附后的Y坐标
-  const snappedY = nearestRow * unitHeight
-
-  return {
-    x: parseFloat(snappedX.toFixed(2)),
-    y: parseFloat(snappedY.toFixed(2))
-  }
-}
-
-// 智能吸附（考虑组件尺寸，确保不超出边界）
-export function snapToColumnGridWithSize(
-  position: Position,
-  componentSize: Size,
-  containerInfo: ContainerInfo,
-  gridConfig: GridConfig
-): Position {
-  const { width: containerWidth, height: containerHeight } = containerInfo
-  const { gap } = gridConfig
-
-  // 计算每列的宽度（24列固定）
-  const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
-  const unitWidth = columnWidth + gap
-
-  // 计算最近的列位置
-  let nearestColumn = Math.round(position.x / unitWidth)
-
-  // 计算组件占用的列数（组件宽度已经包含了间距）
-  const componentCols = Math.ceil(componentSize.width / unitWidth)
-
-  // 确保组件不会超出右边界
-  const maxColumn = COLUMNS - componentCols
-  nearestColumn = Math.max(0, Math.min(nearestColumn, maxColumn))
-
-  // 计算吸附后的X坐标：列索引 * (列宽 + 间距)
-  const snappedX = nearestColumn * unitWidth
-
-  // Y坐标不进行栅格吸附，保持原始位置
-  let snappedY = position.y
-
-  // 确保组件不会超出下边界
-  if (snappedY + componentSize.height > containerHeight) {
-    snappedY = containerHeight - componentSize.height
-  }
-
-  // 确保Y坐标不为负数
-  snappedY = Math.max(0, snappedY)
-
-  return {
-    x: parseFloat(snappedX.toFixed(2)),
-    y: parseFloat(snappedY.toFixed(2))
-  }
 }
 
 // 智能高度吸附（只在与上面紧邻组件距离小于等于gap时才吸附）
@@ -459,7 +289,7 @@ export function reorganizeLayout(
   for (const comp of components) {
     // 自动填充组件尺寸到栅格（可选）
     if (!skipAutoFill) {
-      autoFillComponentToGrid(comp, columnWidth, gap)
+      autoFillComponentToGrid(comp, gridConfig)
     }
 
     // 计算组件占用的列数（组件宽度已经包含了间距）
@@ -507,11 +337,11 @@ export function reorganizeLayout(
 // 基于24列栅格系统的组件自动填充
 export function autoFillComponentToGrid(
   component: ComponentItemModel,
-  columnWidth: number,
-  gap: number
+  gridConfig: GridConfig
 ): void {
   // 确保最小尺寸
-  const minWidth = component.minWidth || columnWidth
+  const { cellWidth, gap } = gridConfig
+  const minWidth = component.minWidth || cellWidth
   const minHeight = component.minHeight || 60
 
   component.width = Math.max(component.width, minWidth)
@@ -519,11 +349,11 @@ export function autoFillComponentToGrid(
 
   // 如果组件宽度未填满栅格，则进行填充
   // 计算组件应该占用的列数
-  const requiredCols = Math.ceil(component.width / (columnWidth + gap))
+  const requiredCols = Math.ceil(component.width / (cellWidth + gap))
   const actualCols = Math.min(requiredCols, COLUMNS)
 
   // 计算填充后的宽度
-  const filledWidth = actualCols * columnWidth + (actualCols - 1) * gap
+  const filledWidth = actualCols * cellWidth + (actualCols - 1) * gap
 
   // 更新组件宽度为填充后的宽度
   component.width = parseFloat(filledWidth.toFixed(2))
@@ -534,28 +364,22 @@ export function resizeComponentWithAutoFill(
   component: ComponentItemModel,
   newSize: Size,
   gridConfig: GridConfig,
-  containerWidth?: number
 ): Size {
-  const { gap } = gridConfig
-
-  // 计算每列的宽度（24列固定）
-  const columnWidth = containerWidth ?
-    (containerWidth - (COLUMNS - 1) * gap) / COLUMNS :
-    gridConfig.cellWidth
+  const { gap, cellWidth } = gridConfig
 
   // 确保最小尺寸
-  const minWidth = component.minWidth || columnWidth
+  const minWidth = component.minWidth || cellWidth
   const minHeight = component.minHeight || 60
 
   const actualWidth = Math.max(newSize.width, minWidth)
   const actualHeight = Math.max(newSize.height, minHeight)
 
   // 计算组件应该占用的列数
-  const requiredCols = Math.ceil(actualWidth / (columnWidth + gap))
+  const requiredCols = Math.ceil(actualWidth / (cellWidth + gap))
   const actualCols = Math.min(requiredCols, COLUMNS)
 
   // 计算填充后的宽度
-  const filledWidth = actualCols * columnWidth + (actualCols - 1) * gap
+  const filledWidth = actualCols * cellWidth + (actualCols - 1) * gap
 
   // 确保填充后的宽度不小于最小值
   const finalWidth = Math.max(filledWidth, minWidth)

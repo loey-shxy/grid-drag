@@ -14,15 +14,9 @@ export type {
 
 // 导出工具函数
 export {
-  validatePosition,
   validatePositionWithLayout,
   validateDragPosition,
   findAvailablePosition,
-  canAddComponent,
-  calculateAvailableSpace,
-  snapToGrid,
-  snapToColumnGrid,
-  snapToColumnGridWithSize,
   snapToColumnGridWithSmartHeight,
   reorganizeLayout,
   autoFillComponentToGrid,

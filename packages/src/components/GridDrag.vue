@@ -189,7 +189,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
 
   if (isWidthResize) {
     // 只有在调整宽度相关的操作时才进行栅格填充
-    filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig, containerInfo.width)
+    filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
   }
 
   // 使用智能验证（考虑动态布局）
@@ -363,7 +363,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
       }
 
       // 确保组件尺寸正确
-      autoFillComponentToGrid(newComponent, gridConfig.cellWidth, gridConfig.gap)
+      autoFillComponentToGrid(newComponent, gridConfig)
 
       // 直接添加组件，不重新布局
       components.value.push(newComponent)
