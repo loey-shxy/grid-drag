@@ -88,7 +88,7 @@ app.use(GridDrag)
 ```typescript
 interface ComponentItemModel {
   id: string
-  type: string
+  type?: string
   name: string
   width: number
   height: number

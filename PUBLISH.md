@@ -17,35 +17,20 @@ npm login
 
 ```bash
 # 补丁版本 (1.0.0 -> 1.0.1) - 修复bug
-npm run version:patch
+npm version patch
 
 # 次要版本 (1.0.0 -> 1.1.0) - 新功能
-npm run version:minor
+npm version minor
 
 # 主要版本 (1.0.0 -> 2.0.0) - 破坏性更改
-npm run version:major
+npm version major
 ```
 
 ### 2. 发布到npm
 
 ```bash
-npm run publish:npm
+npm publish
 ```
-
-或者手动发布：
-
-```bash
-npm run build
-npm publish --access public
-```
-
-## 发布前检查清单
-
-- [ ] 所有测试通过
-- [ ] 文档已更新
-- [ ] CHANGELOG已更新
-- [ ] 版本号已正确更新
-- [ ] 所有更改已提交到git
 
 ## 包信息
 
