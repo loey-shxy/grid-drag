@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, reactive, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
 import { COLUMNS } from '../utils/constant';
 import GridsterItem from './GridsterItem.vue';
@@ -38,12 +38,12 @@ import AddComponent from './AddComponent.vue';
 import { Message } from '@arco-design/web-vue';
 
 import {
-  reorganizeLayout,
   resizeComponentWithAutoFill,
   validatePositionWithLayout,
   validateDragPosition,
   findAvailablePosition,
   autoFillComponentToGrid,
+  adaptiveLayoutOnResize,
 } from '../utils/grid';
 
 interface Props {
@@ -96,7 +96,7 @@ const updateCellWidth = () => {
   const cellWidth = (containerInfo.width - totalGapWidth) / 24
 
   // 保留2位小数，设置最小列宽
-  gridConfig.cellWidth = Math.max(parseFloat(cellWidth.toFixed(2)), 20)
+  gridConfig.cellWidth = Math.max(parseFloat(cellWidth.toFixed(3)), 20)
 }
 
 
@@ -128,30 +128,67 @@ const gridBackgroundStyle = computed(() => {
 })
 
 
-// 在容器大小变化时重新布局
+// 在容器大小变化时进行自适应处理
 const updateContainerInfo = () => {
   if (!gridContainer.value) return
 
   const container = gridContainer.value
   const oldWidth = containerInfo.width
   const oldHeight = containerInfo.height
+  const oldCellWidth = gridConfig.cellWidth
 
+  // 保存旧的容器信息
+  const oldContainerInfo = {
+    width: oldWidth,
+    height: oldHeight
+  }
+
+  // 更新容器信息
   containerInfo.width = container.clientWidth
   containerInfo.height = container.clientHeight
 
+  // 更新列宽
   updateCellWidth()
+  const newCellWidth = gridConfig.cellWidth
 
-  // 只有当宽度或高度增加时，才进行重新布局
-  const widthIncreased = containerInfo.width > oldWidth
-  const heightIncreased = containerInfo.height > oldHeight
+  // 如果容器尺寸发生变化，进行自适应调整
+  if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
+    console.log('容器尺寸变化，进行自适应调整', {
+      oldSize: { width: oldWidth, height: oldHeight },
+      newSize: { width: containerInfo.width, height: containerInfo.height },
+      oldCellWidth,
+      newCellWidth,
+      cellWidthRatio: newCellWidth / oldCellWidth
+    })
 
-  if (widthIncreased || heightIncreased) {
-    console.log('容器尺寸增加，重新布局')
-    reorganizeLayout(components.value, containerInfo, gridConfig)
-  } else if (oldWidth !== containerInfo.width || oldHeight !== containerInfo.height) {
-    console.log('容器尺寸减小，保持原有布局')
-    // 尺寸减小时，只进行边界检查和调整，不重新布局
-    reorganizeLayout(components.value, containerInfo, gridConfig, false, true)
+    // 记录调整前的组件状态
+    const beforeAdjustment = components.value.map(c => ({
+      id: c.id,
+      x: c.x,
+      width: c.width
+    }))
+
+    // 使用自适应布局调整组件
+    components.value = adaptiveLayoutOnResize(
+      components.value,
+      oldContainerInfo,
+      containerInfo,
+      oldCellWidth,
+      newCellWidth,
+      gridConfig
+    )
+
+    // 记录调整后的组件状态
+    const afterAdjustment = components.value.map(c => ({
+      id: c.id,
+      x: c.x,
+      width: c.width
+    }))
+
+    console.log('组件自适应调整结果', {
+      before: beforeAdjustment,
+      after: afterAdjustment
+    })
   }
 }
 
@@ -237,9 +274,6 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
           }
         })
       }
-
-      // 新的碰撞检测逻辑已经在validatePositionWithLayout中处理了布局调整
-      // 不需要额外的reorganizeLayout调用
     }
   }
 }
@@ -340,7 +374,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
     if (position) {
       const newComponent: ComponentItemModel = {
         ...comp,
-        id: `${comp.type}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
+        id: `${comp.id}-${Date.now()}-${Math.random().toString(36).substring(2, 11)}`,
         x: position.x,
         y: position.y
       }

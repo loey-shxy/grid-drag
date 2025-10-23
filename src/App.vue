@@ -63,7 +63,7 @@ const componentLibrary = ref<ComponentLibrary[]>([
     type: 'chart-bar',
     name: '柱状图',
     width: 350,   // 像素
-    height: 300,  // 像素
+    height: 200,  // 像素
     minWidth: 200,
     minHeight: 200,
     id: useId(),
@@ -85,7 +85,7 @@ const componentLibrary = ref<ComponentLibrary[]>([
     type: 'table',
     name: '数据表格',
     width: 600,   // 像素
-    height: 300,  // 像素
+    height: 400,  // 像素
     minWidth: 200,
     minHeight: 200,
     id: useId(),

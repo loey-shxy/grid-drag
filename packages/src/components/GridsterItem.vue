@@ -24,6 +24,7 @@
 import { computed, ref } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
 import { resizeComponentWithAutoFill } from '../utils/grid'
+import { MIN_HEIGHT, MIN_WIDTH } from '../utils/constant';
 
 interface Props {
   component: ComponentItemModel
@@ -53,7 +54,7 @@ const componentStyle = computed((): any => {
     top: `${props.component.y}px`,
     width: `${props.component.width}px`,
     height: `${props.component.height}px`,
-    zIndex: isDragging.value || isResizing.value ? 100 : 1,
+    zIndex: isDragging.value || isResizing.value ? MIN_WIDTH : 1,
     cursor: isResizing.value ? getResizeCursor(currentResizeType.value) : 'move'
   }
 })
@@ -223,13 +224,13 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     switch (type) {
       case 'right':
         // 右边缘：只改变宽度，从右侧扩展，左边缘保持不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth + deltaX)
         // 位置不变
         break
 
       case 'left':
         // 左边缘：改变宽度，从左侧变化，右边缘保持不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
         // 调整位置以保持右边缘不变
         newX = startXPos + startWidth - newWidth
         // 检查与左侧组件的gap距离
@@ -240,13 +241,13 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'bottom':
         // 下边缘：只改变高度，从下侧扩展，上边缘保持不变
-        newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight + deltaY)
         // 位置不变
         break
 
       case 'top':
         // 上边缘：改变高度，从上侧变化，下边缘保持不变
-        newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight - deltaY)
         // 调整位置以保持下边缘不变
         newY = startYPos + startHeight - newHeight
         // 检查与上方组件的gap距离
@@ -257,8 +258,8 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'top-right':
         // 右上角：左侧和底部不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
-        newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth + deltaX)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight - deltaY)
         // 调整Y位置以保持底部不变
         newY = startYPos + startHeight - newHeight
         // 检查与上方组件的gap距离
@@ -270,8 +271,8 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'top-left':
         // 左上角：右侧和底部不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
-        newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight - deltaY)
         // 调整位置以保持右侧和底部不变
         newX = startXPos + startWidth - newWidth
         newY = startYPos + startHeight - newHeight
@@ -285,8 +286,8 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'bottom-left':
         // 左下角：右侧和上侧不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
-        newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight + deltaY)
         // 调整X位置以保持右侧不变
         newX = startXPos + startWidth - newWidth
         // 检查与左侧组件的gap距离
@@ -298,8 +299,8 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'bottom-right':
         // 右下角：左侧和上侧不变
-        newWidth = Math.max(props.component.minWidth || 100, startWidth + deltaX)
-        newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth + deltaX)
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight + deltaY)
         // 位置不变（左侧和上侧不变）
         break
     }
@@ -333,8 +334,8 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     }
 
     // 确保最小尺寸
-    newWidth = Math.max(props.component.minWidth || 100, newWidth)
-    newHeight = Math.max(props.component.minHeight || 60, newHeight)
+    newWidth = Math.max(props.component.minWidth || MIN_WIDTH, newWidth)
+    newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, newHeight)
 
     // 根据调整类型决定是否应用自动填充
     let filledSize = { width: newWidth, height: newHeight }
@@ -362,15 +363,15 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     }
 
     // 确保最终尺寸不小于最小值
-    filledSize.width = Math.max(props.component.minWidth || 100, filledSize.width)
-    filledSize.height = Math.max(props.component.minHeight || 60, filledSize.height)
+    filledSize.width = Math.max(props.component.minWidth || MIN_WIDTH, filledSize.width)
+    filledSize.height = Math.max(props.component.minHeight || MIN_HEIGHT, filledSize.height)
 
     // 发射 resize 事件
     emit('resize', props.component.id, {
-      width: parseFloat(filledSize.width.toFixed(2)),
-      height: parseFloat(filledSize.height.toFixed(2)),
-      x: parseFloat(newX.toFixed(2)),
-      y: parseFloat(newY.toFixed(2)),
+      width: parseFloat(filledSize.width.toFixed(3)),
+      height: parseFloat(filledSize.height.toFixed(3)),
+      x: parseFloat(newX.toFixed(3)),
+      y: parseFloat(newY.toFixed(3)),
       resizeType: type
     })
   }

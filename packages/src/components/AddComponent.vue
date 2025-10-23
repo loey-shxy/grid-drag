@@ -22,7 +22,7 @@
           <div class="components-grid">
             <div
               v-for="component in filteredComponents"
-              :key="component.type"
+              :key="component.id"
               class="component-card"
               :class="{
                 'selected': isSelected(component),
@@ -64,7 +64,7 @@ const emit = defineEmits<Emits>()
 
 const onComponentSelect = (component: ComponentItemModel) => {
   const index = selectedComponents.value.findIndex(
-    item => item.type === component.type
+    item => item.id === component.id
   )
   
   if (index > -1) {
@@ -86,15 +86,14 @@ const filteredComponents = computed(() => {
   
   const query = searchQuery.value.toLowerCase()
   return props.componentLibrary.filter(component =>
-    component.name.toLowerCase().includes(query) ||
-    component.type.toLowerCase().includes(query)
+    component.name.toLowerCase().includes(query)
   )
 })
 
 // 检查组件是否被选中
 const isSelected = (component: ComponentItemModel) => {
   return selectedComponents.value.some(
-    selected => selected.type === component.type
+    selected => selected.id === component.id
   )
 }
 
@@ -102,7 +101,6 @@ const onComponentClick = (component: ComponentItemModel) => {
     // 创建组件副本，确保每次添加都是新的实例
     const componentCopy: ComponentItemModel = {
     ...component,
-    id: `${component.type}-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
     x: 0,
     y: 0
   }

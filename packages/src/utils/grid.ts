@@ -1,7 +1,7 @@
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from "../types/layout";
-import { COLUMNS } from "./constant";
+import { COLUMNS, MIN_HEIGHT } from "./constant";
 
-// 查找可用位置（不重新布局，自动向后排列）
+// 查找可用位置自动向后排列
 export function findAvailablePosition(
   components: ComponentItemModel[],
   newComponent: ComponentItemModel,
@@ -10,10 +10,6 @@ export function findAvailablePosition(
 ): Position | null {
   const { width: containerWidth, height: containerHeight } = containerInfo
   const { gap, cellWidth } = gridConfig
-
-
-  console.log(`🔍 查找位置 - 容器宽度: ${containerWidth}, 列宽: ${cellWidth}, 间距: ${gap}`)
-  console.log(`📦 原始组件: ${newComponent.name}, 宽度: ${newComponent.width}, 高度: ${newComponent.height}`)
 
   // 首先对组件进行自动填充
   autoFillComponentToGrid(newComponent, gridConfig)
@@ -85,7 +81,7 @@ export function findAvailablePosition(
   }
 
   // 验证新位置不与现有组件重叠
-  const newPosition = { x: parseFloat(newX.toFixed(2)), y: parseFloat(newY.toFixed(2)) }
+  const newPosition = { x: parseFloat(newX.toFixed(3)), y: parseFloat(newY.toFixed(3)) }
   const newSize = { width: newComponent.width, height: newComponent.height }
 
   for (const existingComp of components) {
@@ -179,8 +175,8 @@ export function snapToColumnGridWithSmartHeight(
   snappedY = Math.max(0, snappedY)
 
   return {
-    x: parseFloat(snappedX.toFixed(2)),
-    y: parseFloat(snappedY.toFixed(2))
+    x: parseFloat(snappedX.toFixed(3)),
+    y: parseFloat(snappedY.toFixed(3))
   }
 }
 
@@ -248,8 +244,8 @@ export function reorganizeLayout(
     }
 
     // 计算组件的实际位置：列索引 * (列宽 + 间距)
-    comp.x = parseFloat((bestStartCol * (columnWidth + gap)).toFixed(2))
-    comp.y = parseFloat(minHeight.toFixed(2))
+    comp.x = parseFloat((bestStartCol * (columnWidth + gap)).toFixed(3))
+    comp.y = parseFloat(minHeight.toFixed(3))
 
     // 检查是否超出容器高度
     if (comp.y + comp.height > containerHeight) {
@@ -275,7 +271,7 @@ export function autoFillComponentToGrid(
   // 确保最小尺寸
   const { cellWidth, gap } = gridConfig
   const minWidth = component.minWidth || cellWidth
-  const minHeight = component.minHeight || 60
+  const minHeight = component.minHeight || MIN_HEIGHT
 
   component.width = Math.max(component.width, minWidth)
   component.height = Math.max(component.height, minHeight)
@@ -289,7 +285,7 @@ export function autoFillComponentToGrid(
   const filledWidth = actualCols * cellWidth + (actualCols - 1) * gap
 
   // 更新组件宽度为填充后的宽度
-  component.width = parseFloat(filledWidth.toFixed(2))
+  component.width = parseFloat(filledWidth.toFixed(3))
 }
 
 // 修改组件调整大小时也支持自动填充（基于24列栅格）
@@ -302,7 +298,7 @@ export function resizeComponentWithAutoFill(
 
   // 确保最小尺寸
   const minWidth = component.minWidth || cellWidth
-  const minHeight = component.minHeight || 60
+  const minHeight = component.minHeight || MIN_HEIGHT
 
   const actualWidth = Math.max(newSize.width, minWidth)
   const actualHeight = Math.max(newSize.height, minHeight)
@@ -320,8 +316,8 @@ export function resizeComponentWithAutoFill(
   const finalHeight = Math.max(actualHeight, minHeight)
 
   return {
-    width: parseFloat(finalWidth.toFixed(2)),
-    height: parseFloat(finalHeight.toFixed(2))
+    width: parseFloat(finalWidth.toFixed(3)),
+    height: parseFloat(finalHeight.toFixed(3))
   }
 }
 
@@ -417,7 +413,7 @@ function handleRightExpansion(
 
     for (const comp of componentsToWrap) {
       // 尝试为每个需要换行的组件找到正下方的位置
-      const newY = findPositionBelowComponent(allComponents, comp, containerInfo, gridConfig)
+      const newY = findPositionBelowComponent(allComponents, comp, gridConfig)
 
       // 检查是否超出容器底部
       if (newY + comp.height > containerHeight) {
@@ -518,7 +514,7 @@ function handleBottomExpansion(
       return { affected: [], canResize: false } // 无法调整
     }
 
-    affected.push({ ...comp, x: comp.x, y: newY })
+    affected.push({ ...comp, x: parseFloat(comp.x.toFixed(3)), y: parseFloat(newY.toFixed(3)) })
   }
 
   return { affected, canResize: true }
@@ -528,7 +524,6 @@ function handleBottomExpansion(
 function findPositionBelowComponent(
   components: ComponentItemModel[],
   component: ComponentItemModel,
-  containerInfo: ContainerInfo,
   gridConfig: GridConfig
 ): number {
   const { gap } = gridConfig
@@ -861,4 +856,109 @@ export function validateDragPosition(
 
   // 没有重叠，可以自由拖拽
   return { valid: true, affectedComponents: [], finalPosition: snappedPosition }
+}
+// 自适应布局：当视口尺寸变化时，重新计算组件的像素尺寸
+export function adaptiveLayoutResize(
+  components: ComponentItemModel[],
+  oldCellWidth: number,
+  newCellWidth: number,
+  containerInfo: ContainerInfo
+): ComponentItemModel[] {
+  if (oldCellWidth === newCellWidth) {
+    return components // 列宽没有变化，不需要调整
+  }
+
+  const scaleRatio = newCellWidth / oldCellWidth
+
+  return components.map(component => {
+    // 重新计算组件的像素尺寸
+    const newPixelWidth = Math.round(component.width * scaleRatio)
+    const newPixelHeight = component.height // 高度保持不变，因为高度不依赖于列宽
+
+    // 确保组件不超出容器边界
+    const maxWidth = containerInfo.width - component.x
+    const maxHeight = containerInfo.height - component.y
+
+    return {
+      ...component,
+      width: Math.min(newPixelWidth, maxWidth),
+      height: Math.min(newPixelHeight, maxHeight)
+    }
+  })
+}
+
+// 自适应布局：当容器尺寸变化时的智能处理
+export function adaptiveLayoutOnResize(
+  components: ComponentItemModel[],
+  oldContainerInfo: ContainerInfo,
+  newContainerInfo: ContainerInfo,
+  oldCellWidth: number,
+  newCellWidth: number,
+  gridConfig: GridConfig
+): ComponentItemModel[] {
+  // 如果容器宽度没有变化，直接返回
+  if (oldContainerInfo.width === newContainerInfo.width) {
+    return components
+  }
+
+  // 计算缩放比例
+  const cellWidthRatio = newCellWidth / oldCellWidth
+
+  return components.map(component => {
+    // 重新计算组件位置和尺寸
+    let newX = component.x
+    let newY = component.y
+    let newWidth = component.width
+    let newHeight = component.height
+
+    // 如果列宽发生变化，需要重新计算位置和宽度
+    if (cellWidthRatio !== 1) {
+      // 基于栅格系统重新计算位置和尺寸
+      const { gap } = gridConfig
+
+      // 更精确的栅格列计算
+      // 计算组件在旧栅格中的起始列（从0开始）
+      const oldStartColumn = Math.round(component.x / (oldCellWidth + gap))
+
+      // 计算组件占用的列数
+      // 组件宽度 = 列数 * cellWidth + (列数-1) * gap
+      // 所以 列数 = (组件宽度 + gap) / (cellWidth + gap)
+      const oldColumnsSpanned = Math.max(1, Math.round((component.width + gap) / (oldCellWidth + gap)))
+
+      // 基于新的列宽重新计算位置和宽度
+      newX = oldStartColumn * (newCellWidth + gap)
+      newWidth = oldColumnsSpanned * newCellWidth + (oldColumnsSpanned - 1) * gap
+
+      // 确保最小宽度（至少一列）
+      newWidth = Math.max(newWidth, newCellWidth)
+    }
+
+    // 确保组件不超出新的容器边界
+    if (newX + newWidth > newContainerInfo.width) {
+      // 如果组件超出右边界，调整位置或尺寸
+      const availableWidth = newContainerInfo.width - newX
+      if (availableWidth > 0) {
+        newWidth = Math.min(newWidth, availableWidth)
+      } else {
+        // 如果位置本身就超出边界，需要调整位置
+        newX = Math.max(0, newContainerInfo.width - newWidth)
+      }
+    }
+
+    if (newY + newHeight > newContainerInfo.height) {
+      // 如果组件超出下边界，调整高度
+      const availableHeight = newContainerInfo.height - newY
+      if (availableHeight > 0) {
+        newHeight = Math.min(newHeight, availableHeight)
+      }
+    }
+
+    return {
+      ...component,
+      x: parseFloat(newX.toFixed(3)),
+      y: parseFloat(newY.toFixed(3)),
+      width: parseFloat(newWidth.toFixed(3)),
+      height: parseFloat(newHeight.toFixed(3))
+    }
+  })
 }

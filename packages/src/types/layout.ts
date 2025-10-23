@@ -1,11 +1,11 @@
 export interface ComponentItemModel  {
   id: string;
-  type: string;
   name: string;
   width: number;  // 栅格单位
   height: number; // 栅格单位
   x: number;      // 栅格坐标
   y: number;      // 栅格坐标
+  type?: string;
   minWidth?: number;
   minHeight?: number;
 }
