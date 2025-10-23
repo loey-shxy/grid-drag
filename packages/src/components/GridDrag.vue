@@ -384,7 +384,7 @@ const addComponents = (selectedComponents: ComponentItemModel[]) => {
     console.log(`成功添加 ${addedCount} 个组件`)
   }
 
-  addComponentRef.value.open()
+  addComponentRef.value.close()
 }
 
 

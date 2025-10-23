@@ -119,8 +119,13 @@ export function findAvailablePosition(
   // 计算每列的宽度（24列固定）
   const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS
 
+  console.log(`🔍 查找位置 - 容器宽度: ${containerWidth}, 列宽: ${columnWidth}, 间距: ${gap}`)
+  console.log(`📦 原始组件: ${newComponent.name}, 宽度: ${newComponent.width}, 高度: ${newComponent.height}`)
+
   // 首先对组件进行自动填充
   autoFillComponentToGrid(newComponent, columnWidth, gap)
+
+  console.log(`📦 填充后组件: ${newComponent.name}, 宽度: ${newComponent.width}, 高度: ${newComponent.height}`)
 
   // 如果组件宽度超过容器宽度，无法放置
   if (newComponent.width > containerWidth) {
@@ -128,21 +133,26 @@ export function findAvailablePosition(
     return null
   }
 
-  // 计算组件占用的列数
-  const spanCols = Math.ceil(newComponent.width / columnWidth)
+  // 计算组件占用的列数（组件宽度已经包含了间距，不需要再加gap）
+  const spanCols = Math.ceil(newComponent.width / (columnWidth + gap))
   const actualSpanCols = Math.min(spanCols, COLUMNS)
+
+  console.log(`📏 组件占用列数: ${spanCols} -> ${actualSpanCols}`)
 
   // 计算每列的当前高度
   const columnHeights: number[] = new Array(COLUMNS).fill(0)
 
   // 根据现有组件更新列高度
   for (const comp of components) {
-    // 修正列索引计算：使用单位宽度而不是加上gap
-    const unitWidth = columnWidth + gap
-    const startCol = Math.floor(comp.x / unitWidth)
-    const compSpanCols = Math.ceil(comp.width / columnWidth)
+    // 计算组件起始列：x坐标除以(列宽+间距)
+    const startCol = Math.floor(comp.x / (columnWidth + gap))
+    // 计算组件占用的列数（组件宽度已经包含了间距）
+    const compSpanCols = Math.ceil(comp.width / (columnWidth + gap))
     const endCol = Math.min(startCol + compSpanCols, COLUMNS)
     const compBottomY = comp.y + comp.height + gap
+
+    console.log(`📍 现有组件: ${comp.name}, 位置: (${comp.x}, ${comp.y}), 尺寸: ${comp.width}x${comp.height}`)
+    console.log(`📍 占用列: ${startCol} -> ${endCol} (${compSpanCols}列), 底部Y: ${compBottomY}`)
 
     for (let i = startCol; i < endCol; i++) {
       if (i >= 0 && i < COLUMNS) {
@@ -150,6 +160,8 @@ export function findAvailablePosition(
       }
     }
   }
+
+  console.log(`📊 列高度数组:`, columnHeights.slice(0, 12)) // 只显示前12列
 
   // 找到最佳放置位置（高度最低的连续列）
   let bestStartCol = 0
@@ -167,13 +179,15 @@ export function findAvailablePosition(
     }
   }
 
-  const unitWidth = columnWidth + gap
-  const newX = bestStartCol * unitWidth
+  // 计算实际位置：列索引 * (列宽 + 间距)
+  const newX = bestStartCol * (columnWidth + gap)
   const newY = minHeight
+
+  console.log(`🎯 最佳位置: 列${bestStartCol}, 高度${minHeight} -> 坐标(${newX}, ${newY})`)
 
   // 检查是否超出容器高度
   if (newY + newComponent.height > containerHeight) {
-    console.warn('位置超出容器高度')
+    console.warn(`❌ 位置超出容器高度: ${newY + newComponent.height} > ${containerHeight}`)
     return null
   }
 
@@ -264,7 +278,7 @@ export function snapToColumnGrid(
   // 确保列索引在有效范围内
   nearestColumn = Math.max(0, Math.min(nearestColumn, COLUMNS - 1))
 
-  // 计算吸附后的X坐标
+  // 计算吸附后的X坐标：列索引 * (列宽 + 间距)
   const snappedX = nearestColumn * unitWidth
 
   // 计算最近的行位置
@@ -299,14 +313,14 @@ export function snapToColumnGridWithSize(
   // 计算最近的列位置
   let nearestColumn = Math.round(position.x / unitWidth)
 
-  // 计算组件占用的列数
-  const componentCols = Math.ceil((componentSize.width + gap) / unitWidth)
+  // 计算组件占用的列数（组件宽度已经包含了间距）
+  const componentCols = Math.ceil(componentSize.width / unitWidth)
 
   // 确保组件不会超出右边界
   const maxColumn = COLUMNS - componentCols
   nearestColumn = Math.max(0, Math.min(nearestColumn, maxColumn))
 
-  // 计算吸附后的X坐标
+  // 计算吸附后的X坐标：列索引 * (列宽 + 间距)
   const snappedX = nearestColumn * unitWidth
 
   // Y坐标不进行栅格吸附，保持原始位置
@@ -345,14 +359,14 @@ export function snapToColumnGridWithSmartHeight(
   // 计算最近的列位置
   let nearestColumn = Math.round(position.x / unitWidth)
 
-  // 计算组件占用的列数
-  const componentCols = Math.ceil((componentSize.width + gap) / unitWidth)
+  // 计算组件占用的列数（组件宽度已经包含了间距）
+  const componentCols = Math.ceil(componentSize.width / unitWidth)
 
   // 确保组件不会超出右边界
   const maxColumn = COLUMNS - componentCols
   nearestColumn = Math.max(0, Math.min(nearestColumn, maxColumn))
 
-  // 计算吸附后的X坐标
+  // 计算吸附后的X坐标：列索引 * (列宽 + 间距)
   const snappedX = nearestColumn * unitWidth
 
   // 智能Y坐标处理
@@ -448,8 +462,8 @@ export function reorganizeLayout(
       autoFillComponentToGrid(comp, columnWidth, gap)
     }
 
-    // 计算组件占用的列数
-    const spanCols = Math.ceil((comp.width + gap) / (columnWidth + gap))
+    // 计算组件占用的列数（组件宽度已经包含了间距）
+    const spanCols = Math.ceil(comp.width / (columnWidth + gap))
     const actualSpanCols = Math.min(spanCols, COLUMNS)
 
     // 找到最佳放置位置（高度最低的连续列）
@@ -470,7 +484,7 @@ export function reorganizeLayout(
       }
     }
 
-    // 计算组件的实际位置
+    // 计算组件的实际位置：列索引 * (列宽 + 间距)
     comp.x = parseFloat((bestStartCol * (columnWidth + gap)).toFixed(2))
     comp.y = parseFloat(minHeight.toFixed(2))
 
@@ -505,7 +519,7 @@ export function autoFillComponentToGrid(
 
   // 如果组件宽度未填满栅格，则进行填充
   // 计算组件应该占用的列数
-  const requiredCols = Math.ceil((component.width + gap) / (columnWidth + gap))
+  const requiredCols = Math.ceil(component.width / (columnWidth + gap))
   const actualCols = Math.min(requiredCols, COLUMNS)
 
   // 计算填充后的宽度
@@ -537,7 +551,7 @@ export function resizeComponentWithAutoFill(
   const actualHeight = Math.max(newSize.height, minHeight)
 
   // 计算组件应该占用的列数
-  const requiredCols = Math.ceil((actualWidth + gap) / (columnWidth + gap))
+  const requiredCols = Math.ceil(actualWidth / (columnWidth + gap))
   const actualCols = Math.min(requiredCols, COLUMNS)
 
   // 计算填充后的宽度
