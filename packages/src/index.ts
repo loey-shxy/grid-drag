@@ -40,7 +40,7 @@ export function install(app: App): void {
 }
 
 // 插件对象
-export interface VueGridLayoutPlugin {
+export interface GridDragPlugin {
   install: (app: App) => void
   GridDrag: typeof GridDrag
   GridsterItem: typeof GridsterItem
@@ -48,7 +48,7 @@ export interface VueGridLayoutPlugin {
 }
 
 // 默认导出
-const plugin: VueGridLayoutPlugin = {
+const plugin: GridDragPlugin = {
   install,
   GridDrag,
   GridsterItem,

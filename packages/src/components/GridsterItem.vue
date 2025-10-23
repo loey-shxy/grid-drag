@@ -1,13 +1,6 @@
 <template>
-  <div 
-    class="gridster-item" 
-    :class="{ resizing: isResizing }" 
-    :style="componentStyle" 
-    draggable="true"
-    @dragstart="onDragStart" 
-    @drag="onDrag" 
-    @dragend="onDragEnd"
-  >
+  <div class="gridster-item" :class="{ resizing: isResizing }" :style="componentStyle" draggable="true"
+    @dragstart="onDragStart" @drag="onDrag" @dragend="onDragEnd">
 
     <slot></slot>
 
@@ -36,6 +29,7 @@ interface Props {
   component: ComponentItemModel
   gridConfig: GridConfig
   containerInfo: ContainerInfo
+  allComponents?: ComponentItemModel[] // 添加所有组件列表
 }
 
 const props = defineProps<Props>()
@@ -142,6 +136,56 @@ const onDragEnd = () => {
   dragOffset.value = { x: 0, y: 0 }
 }
 
+// 获取其他组件列表（排除当前组件）
+const getOtherComponents = () => {
+  if (!props.allComponents) return []
+  return props.allComponents.filter(comp => comp.id !== props.component.id)
+}
+
+// 检查与左侧组件的距离
+const checkLeftGap = (newX: number) => {
+  const otherComponents = getOtherComponents()
+  const gap = props.gridConfig.gap
+
+  for (const comp of otherComponents) {
+    // 检查是否在垂直方向有重叠
+    const verticalOverlap = !(props.component.y + props.component.height <= comp.y || comp.y + comp.height <= props.component.y)
+
+    if (verticalOverlap) {
+      // 检查是否在左侧
+      if (comp.x + comp.width <= props.component.x) {
+        const distance = newX - (comp.x + comp.width)
+        if (distance < gap) {
+          return comp.x + comp.width + gap // 返回最小允许的X坐标
+        }
+      }
+    }
+  }
+  return newX // 没有冲突，返回原值
+}
+
+// 检查与上方组件的距离
+const checkTopGap = (newY: number) => {
+  const otherComponents = getOtherComponents()
+  const gap = props.gridConfig.gap
+
+  for (const comp of otherComponents) {
+    // 检查是否在水平方向有重叠
+    const horizontalOverlap = !(props.component.x + props.component.width <= comp.x || comp.x + comp.width <= props.component.x)
+
+    if (horizontalOverlap) {
+      // 检查是否在上方
+      if (comp.y + comp.height <= props.component.y) {
+        const distance = newY - (comp.y + comp.height)
+        if (distance < gap) {
+          return comp.y + comp.height + gap // 返回最小允许的Y坐标
+        }
+      }
+    }
+  }
+  return newY // 没有冲突，返回原值
+}
+
 // 调整大小（像素计算）
 const onResizeStart = (type: string, e: MouseEvent) => {
   e.preventDefault()
@@ -188,6 +232,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newWidth = Math.max(props.component.minWidth || 100, startWidth - deltaX)
         // 调整位置以保持右边缘不变
         newX = startXPos + startWidth - newWidth
+        // 检查与左侧组件的gap距离
+        newX = checkLeftGap(newX)
+        // 根据调整后的X重新计算宽度
+        newWidth = startXPos + startWidth - newX
         break
 
       case 'bottom':
@@ -201,6 +249,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         // 调整位置以保持下边缘不变
         newY = startYPos + startHeight - newHeight
+        // 检查与上方组件的gap距离
+        newY = checkTopGap(newY)
+        // 根据调整后的Y重新计算高度
+        newHeight = startYPos + startHeight - newY
         break
 
       case 'top-right':
@@ -209,6 +261,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newHeight = Math.max(props.component.minHeight || 60, startHeight - deltaY)
         // 调整Y位置以保持底部不变
         newY = startYPos + startHeight - newHeight
+        // 检查与上方组件的gap距离
+        newY = checkTopGap(newY)
+        // 根据调整后的Y重新计算高度
+        newHeight = startYPos + startHeight - newY
         // X位置不变（左侧不变）
         break
 
@@ -219,6 +275,12 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         // 调整位置以保持右侧和底部不变
         newX = startXPos + startWidth - newWidth
         newY = startYPos + startHeight - newHeight
+        // 检查与左侧和上方组件的gap距离
+        newX = checkLeftGap(newX)
+        newY = checkTopGap(newY)
+        // 根据调整后的位置重新计算尺寸
+        newWidth = startXPos + startWidth - newX
+        newHeight = startYPos + startHeight - newY
         break
 
       case 'bottom-left':
@@ -227,6 +289,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newHeight = Math.max(props.component.minHeight || 60, startHeight + deltaY)
         // 调整X位置以保持右侧不变
         newX = startXPos + startWidth - newWidth
+        // 检查与左侧组件的gap距离
+        newX = checkLeftGap(newX)
+        // 根据调整后的X重新计算宽度
+        newWidth = startXPos + startWidth - newX
         // Y位置不变（上侧不变）
         break
 
@@ -242,7 +308,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     // 确保位置不为负数
     newX = Math.max(0, newX)
     newY = Math.max(0, newY)
-    
+
     // 确保组件不超出容器右边界和下边界
     if (newX + newWidth > containerWidth) {
       if (type.includes('left')) {
@@ -254,7 +320,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         newWidth = containerWidth - newX
       }
     }
-    
+
     if (newY + newHeight > containerHeight) {
       if (type.includes('top')) {
         // 如果是从上侧调整，调整位置而不是高度

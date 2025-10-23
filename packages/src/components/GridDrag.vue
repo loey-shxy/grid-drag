@@ -15,24 +15,14 @@
         <div class="grid-cell" v-for="item in COLUMNS" :key="item">
         </div>
       </div>
-      <GridsterItem
-        v-for="component in addedComponents" 
-        :key="component.id" 
-        :component="component"
-        :grid-config="gridConfig" 
-        :container-info="containerInfo" 
-        @resize="onComponentResize" 
-        @drag="onComponentDrag"
-        @remove="removeComponent">
+      <GridsterItem v-for="component in addedComponents" :key="component.id" :component="component"
+        :grid-config="gridConfig" :container-info="containerInfo" :all-components="addedComponents"
+        @resize="onComponentResize" @drag="onComponentDrag" @remove="removeComponent">
         <slot name="item" :itemData="component"></slot>
       </GridsterItem>
     </div>
   </div>
-  <AddComponent 
-    ref="addComponentRef" 
-    @confirm="addComponents"
-    :component-library="props.componentLibrary"
-  >
+  <AddComponent ref="addComponentRef" @confirm="addComponents" :component-library="props.componentLibrary">
     <template v-for="slot in Object.keys($slots)" :key="slot" #[slot]="slotProps">
       <slot :name="slot" v-bind="slotProps || {}"></slot>
     </template>
@@ -62,7 +52,7 @@ interface Props {
 }
 const props = defineProps<Props>()
 const emit = defineEmits([
-  'get-container-size', 
+  'get-container-size',
   'add-component',
   'update:added-components'
 ])
@@ -79,7 +69,6 @@ const components = computed({
 const gridConfig = reactive<GridConfig>({
   gap: 10,
   cellWidth: 0, // 动态计算
-  cellHeight: 80 // 固定行高
 })
 
 const containerInfo = reactive<ContainerInfo>({
@@ -155,7 +144,7 @@ const updateContainerInfo = () => {
   // 只有当宽度或高度增加时，才进行重新布局
   const widthIncreased = containerInfo.width > oldWidth
   const heightIncreased = containerInfo.height > oldHeight
-  
+
   if (widthIncreased || heightIncreased) {
     console.log('容器尺寸增加，重新布局')
     reorganizeLayout(components.value, containerInfo, gridConfig)
@@ -171,7 +160,7 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
   if (componentIndex === -1) return
 
   const component = components.value[componentIndex]!
-  
+
   const newSize: Size = {
     width: newData.width || component!.width,
     height: newData.height || component!.height
@@ -199,7 +188,8 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
     newPosition,
     filledSize,
     containerInfo,
-    gridConfig
+    gridConfig,
+    resizeType
   )
 
   if (validationResult.valid) {
@@ -229,7 +219,8 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
       { x: component.x, y: component.y }, // 保持原位置
       filledSize, // 使用填充后的尺寸
       containerInfo,
-      gridConfig
+      gridConfig,
+      resizeType
     )
 
     if (fallbackResult.valid) {
@@ -282,8 +273,6 @@ const onComponentDrag = (id: string, newPosition: Position) => {
         }
       })
     }
-
-    // 智能拖拽验证已经处理了布局调整，不需要额外的reorganizeLayout调用
   }
 }
 
@@ -292,12 +281,6 @@ const removeComponent = (id: string) => {
   const index = components.value.findIndex(c => c.id === id)
   if (index !== -1) {
     components.value.splice(index, 1)
-    console.log(`已移除组件: ${id}`)
-
-    // 移除后重新组织布局
-    nextTick(() => {
-      reorganizeLayout(components.value, containerInfo, gridConfig)
-    })
   }
 }
 

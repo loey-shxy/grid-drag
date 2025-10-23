@@ -11,12 +11,8 @@ export interface ComponentItemModel  {
 }
 
 export interface GridConfig {
-  // columns: number;
   gap: number;
   cellWidth: number; // 每列的像素宽度（动态计算）
-  cellHeight: number; // 每行的像素高度（动态计算）
-  // cellSize?: number;
-  // rows: number
 }
 
 export interface Position {

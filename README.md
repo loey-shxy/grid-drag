@@ -101,7 +101,6 @@ interface ComponentItemModel {
 interface GridConfig {
   gap: number
   cellWidth: number
-  cellHeight: number
 }
 
 interface Position {

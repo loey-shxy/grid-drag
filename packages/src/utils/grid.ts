@@ -1,73 +1,6 @@
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from "../types/layout";
 import { COLUMNS } from "./constant";
 
-// 计算两个组件之间的最小距离
-function getComponentDistance(comp1: ComponentItemModel, comp2: ComponentItemModel): number {
-  // 计算水平距离
-  let horizontalDistance = 0;
-  if (comp1.x + comp1.width <= comp2.x) {
-    // comp1 在 comp2 左侧
-    horizontalDistance = comp2.x - (comp1.x + comp1.width);
-  } else if (comp2.x + comp2.width <= comp1.x) {
-    // comp1 在 comp2 右侧
-    horizontalDistance = comp1.x - (comp2.x + comp2.width);
-  }
-
-  // 计算垂直距离
-  let verticalDistance = 0;
-  if (comp1.y + comp1.height <= comp2.y) {
-    // comp1 在 comp2 上方
-    verticalDistance = comp2.y - (comp1.y + comp1.height);
-  } else if (comp2.y + comp2.height <= comp1.y) {
-    // comp1 在 comp2 下方
-    verticalDistance = comp1.y - (comp2.y + comp2.height);
-  }
-
-  // 如果组件重叠，返回0
-  if (horizontalDistance === 0 && verticalDistance === 0) {
-    return 0;
-  }
-
-  // 返回最小距离（如果一个方向重叠，则返回另一个方向的距离）
-  if (horizontalDistance === 0) return verticalDistance;
-  if (verticalDistance === 0) return horizontalDistance;
-
-  // 如果两个方向都有距离，返回较小的那个
-  return Math.min(horizontalDistance, verticalDistance);
-}
-
-// 检查组件调整大小后是否需要重新布局
-function shouldTriggerLayout(
-  resizingComponent: ComponentItemModel,
-  newPosition: Position,
-  newSize: Size,
-  allComponents: ComponentItemModel[],
-  gap: number
-): boolean {
-  // 创建调整后的组件副本
-  const resizedComponent = {
-    ...resizingComponent,
-    x: newPosition.x,
-    y: newPosition.y,
-    width: newSize.width,
-    height: newSize.height
-  };
-
-  // 检查与其他组件的距离
-  for (const otherComponent of allComponents) {
-    if (otherComponent.id === resizingComponent.id) continue;
-
-    const distance = getComponentDistance(resizedComponent, otherComponent);
-
-    // 如果距离小于等于gap，需要触发布局调整
-    if (distance <= gap) {
-      return true;
-    }
-  }
-
-  return false;
-}
-
 // 查找可用位置（不重新布局，自动向后排列）
 export function findAvailablePosition(
   components: ComponentItemModel[],
@@ -392,8 +325,8 @@ export function resizeComponentWithAutoFill(
   }
 }
 
-// 检查调整大小是否会影响其他组件，并返回需要更新的组件
-export function getAffectedComponents(
+// 智能处理向右扩展宽度时的碰撞
+function handleRightExpansion(
   components: ComponentItemModel[],
   resizingComponent: ComponentItemModel,
   newPosition: Position,
@@ -402,56 +335,305 @@ export function getAffectedComponents(
   gridConfig: GridConfig
 ): { affected: ComponentItemModel[]; canResize: boolean } {
   const affected: ComponentItemModel[] = []
+  const { width: containerWidth, height: containerHeight } = containerInfo
+  const { gap } = gridConfig
 
-  // 检查是否是尺寸增加
-  const sizeIncreased = newSize.width > resizingComponent.width || newSize.height > resizingComponent.height
-
-  // 如果尺寸增加，检查是否需要触发布局调整
-  let needsLayoutAdjustment = false;
-  if (sizeIncreased) {
-    needsLayoutAdjustment = shouldTriggerLayout(
-      resizingComponent,
-      newPosition,
-      newSize,
-      components,
-      gridConfig.gap
-    );
+  // 创建调整后的组件副本
+  const resizedComponent = {
+    ...resizingComponent,
+    x: newPosition.x,
+    y: newPosition.y,
+    width: newSize.width,
+    height: newSize.height
   }
 
-  // 创建临时组件列表，用于模拟调整后的状态
-  const tempComponents = components.map(comp =>
-    comp.id === resizingComponent.id
-      ? { ...comp, ...newPosition, ...newSize }
-      : { ...comp }
-  )
+  // 找到所有与调整后组件有垂直重叠且在右侧的组件
+  const rightComponents = components.filter(comp => {
+    if (comp.id === resizingComponent.id) return false
+    
+    // 检查垂直重叠
+    const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y || comp.y + comp.height <= resizedComponent.y)
+    
+    // 检查是否在右侧（原始位置的右侧）
+    const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width - gap
+    
+    return verticalOverlap && isOnRight
+  })
 
-  // 只有在需要布局调整时才进行重新布局
-  if (needsLayoutAdjustment) {
-    const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, false)
+  if (rightComponents.length === 0) {
+    return { affected: [], canResize: true }
+  }
 
-    if (!layoutSuccess) {
-      return { affected: [], canResize: false }
+  // 按X坐标排序，从左到右处理
+  rightComponents.sort((a, b) => a.x - b.x)
+
+  const newRightEdge = resizedComponent.x + resizedComponent.width
+
+  // 检查是否会与右侧组件碰撞
+  let needsPush = false
+  let pushDistance = 0
+
+  for (const comp of rightComponents) {
+    const requiredDistance = newRightEdge + gap - comp.x
+    if (requiredDistance > 0) {
+      needsPush = true
+      pushDistance = requiredDistance
+      break // 只需要检查最近的组件
     }
+  }
 
-    // 找出位置发生变化的组件
-    components.forEach(comp => {
-      if (comp.id !== resizingComponent.id) {
-        const tempComp = tempComponents.find(tc => tc.id === comp.id)
-        if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
-          affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
-        }
+  if (!needsPush) {
+    return { affected: [], canResize: true }
+  }
+
+  // 需要推动右侧组件
+  const componentsToMove: ComponentItemModel[] = []
+  const componentsToWrap: ComponentItemModel[] = [] // 需要换行的组件
+  
+  // 首先确定哪些组件需要换行
+  for (const comp of rightComponents) {
+    const newX = comp.x + pushDistance
+    
+    // 检查是否超出容器右边界
+    if (newX + comp.width > containerWidth) {
+      componentsToWrap.push(comp)
+    } else {
+      // 可以在当前行右移
+      componentsToMove.push({ ...comp, x: newX, y: comp.y })
+    }
+  }
+  
+  // 处理需要换行的组件，确保它们不重叠
+  if (componentsToWrap.length > 0) {
+    // 创建包含调整后组件和已移动组件的临时列表
+    const allComponents = [
+      ...components.filter(c => c.id !== resizingComponent.id && !rightComponents.some(rc => rc.id === c.id)),
+      resizedComponent,
+      ...componentsToMove
+    ]
+    
+    // 按X坐标排序需要换行的组件，确保从左到右处理
+    componentsToWrap.sort((a, b) => a.x - b.x)
+    
+    for (const comp of componentsToWrap) {
+      // 为每个需要换行的组件找到正下方的位置
+      const newY = findPositionBelowComponent(allComponents, comp, containerInfo, gridConfig)
+      
+      // 检查是否超出容器底部
+      if (newY + comp.height > containerHeight) {
+        return { affected: [], canResize: false } // 无法调整
       }
-    })
-  } else {
-    // 不需要布局调整，只做边界检查
-    const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, true)
-
-    if (!layoutSuccess) {
-      return { affected: [], canResize: false }
+      
+      // 创建移动后的组件
+      const movedComponent = { ...comp, x: comp.x, y: newY }
+      componentsToMove.push(movedComponent)
+      
+      // 将移动后的组件添加到临时列表中，供后续组件计算位置时参考
+      allComponents.push(movedComponent)
     }
+  }
+  
+  affected.push(...componentsToMove)
+  return { affected, canResize: true }
+}
+
+// 智能处理向下扩展高度时的碰撞
+function handleBottomExpansion(
+  components: ComponentItemModel[],
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): { affected: ComponentItemModel[]; canResize: boolean } {
+  const affected: ComponentItemModel[] = []
+  const { height: containerHeight } = containerInfo
+  const { gap } = gridConfig
+
+  // 创建调整后的组件副本
+  const resizedComponent = {
+    ...resizingComponent,
+    x: newPosition.x,
+    y: newPosition.y,
+    width: newSize.width,
+    height: newSize.height
+  }
+
+  // 找到所有与调整后组件有水平重叠且在下方的组件
+  const bottomComponents = components.filter(comp => {
+    if (comp.id === resizingComponent.id) return false
+    
+    // 检查水平重叠
+    const horizontalOverlap = !(resizedComponent.x + resizedComponent.width <= comp.x || comp.x + comp.width <= resizedComponent.x)
+    
+    // 检查是否在下方（原始位置的下方，考虑gap）
+    const isBelow = comp.y >= resizingComponent.y + resizingComponent.height - gap
+    
+    return horizontalOverlap && isBelow
+  })
+
+  if (bottomComponents.length === 0) {
+    return { affected: [], canResize: true }
+  }
+
+  // 按Y坐标排序，从上到下处理
+  bottomComponents.sort((a, b) => a.y - b.y)
+
+  const newBottomEdge = resizedComponent.y + resizedComponent.height
+
+  // 检查是否会与下方组件碰撞
+  let needsPush = false
+  let pushDistance = 0
+
+  for (const comp of bottomComponents) {
+    const requiredDistance = newBottomEdge + gap - comp.y
+    if (requiredDistance > 0) {
+      needsPush = true
+      pushDistance = requiredDistance
+      break // 只需要检查最近的组件
+    }
+  }
+
+  if (!needsPush) {
+    return { affected: [], canResize: true }
+  }
+
+  // 需要推动下方组件
+  for (const comp of bottomComponents) {
+    const newY = comp.y + pushDistance
+    
+    // 检查是否超出容器底部
+    if (newY + comp.height > containerHeight) {
+      return { affected: [], canResize: false } // 无法调整
+    }
+    
+    affected.push({ ...comp, x: comp.x, y: newY })
   }
 
   return { affected, canResize: true }
+}
+
+// 查找组件正下方的位置
+function findPositionBelowComponent(
+  components: ComponentItemModel[],
+  component: ComponentItemModel,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig
+): number {
+  const { gap } = gridConfig
+  
+  // 从组件底部开始查找
+  let targetY = component.y + component.height + gap
+  
+  // 找到与当前组件有水平重叠的所有组件
+  const overlappingComponents = components.filter(comp => {
+    if (comp.id === component.id) return false
+    
+    // 检查是否有水平重叠（使用组件的原始X位置）
+    const horizontalOverlap = !(component.x + component.width <= comp.x || comp.x + comp.width <= component.x)
+    
+    return horizontalOverlap
+  })
+  
+  // 按Y坐标排序
+  overlappingComponents.sort((a, b) => a.y - b.y)
+  
+  // 持续检查直到找到合适的位置
+  let foundPosition = false
+  while (!foundPosition) {
+    foundPosition = true
+    
+    // 检查在targetY位置是否与任何组件重叠
+    for (const comp of overlappingComponents) {
+      // 检查垂直重叠
+      const verticalOverlap = !(targetY + component.height <= comp.y || comp.y + comp.height <= targetY)
+      
+      if (verticalOverlap) {
+        // 有重叠，需要移到这个组件下方
+        targetY = comp.y + comp.height + gap
+        foundPosition = false
+        break
+      }
+    }
+  }
+  
+  return targetY
+}
+
+// 检查调整大小是否会影响其他组件，并返回需要更新的组件
+export function getAffectedComponents(
+  components: ComponentItemModel[],
+  resizingComponent: ComponentItemModel,
+  newPosition: Position,
+  newSize: Size,
+  containerInfo: ContainerInfo,
+  gridConfig: GridConfig,
+  resizeType?: string
+): { affected: ComponentItemModel[]; canResize: boolean } {
+  // 判断调整类型
+  const widthIncreased = newSize.width > resizingComponent.width
+  const heightIncreased = newSize.height > resizingComponent.height
+  const positionChanged = newPosition.x !== resizingComponent.x || newPosition.y !== resizingComponent.y
+
+  // 如果位置改变了（左侧或上侧调整），使用原有逻辑
+  if (positionChanged) {
+    // 检查是否与其他组件重叠
+    const resizedComponent = {
+      ...resizingComponent,
+      x: newPosition.x,
+      y: newPosition.y,
+      width: newSize.width,
+      height: newSize.height
+    }
+
+    for (const otherComponent of components) {
+      if (otherComponent.id === resizingComponent.id) continue
+
+      if (hasOverlap(
+        { x: resizedComponent.x, y: resizedComponent.y },
+        { width: resizedComponent.width, height: resizedComponent.height },
+        { x: otherComponent.x, y: otherComponent.y },
+        { width: otherComponent.width, height: otherComponent.height }
+      )) {
+        return { affected: [], canResize: false }
+      }
+    }
+
+    return { affected: [], canResize: true }
+  }
+
+  // 根据调整类型选择处理方式
+  if (widthIncreased && (resizeType === 'right' || resizeType?.includes('right'))) {
+    // 向右扩展宽度
+    return handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+  } else if (heightIncreased && (resizeType === 'bottom' || resizeType?.includes('bottom'))) {
+    // 向下扩展高度
+    return handleBottomExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig)
+  } else {
+    // 其他情况，检查重叠
+    const resizedComponent = {
+      ...resizingComponent,
+      x: newPosition.x,
+      y: newPosition.y,
+      width: newSize.width,
+      height: newSize.height
+    }
+
+    for (const otherComponent of components) {
+      if (otherComponent.id === resizingComponent.id) continue
+
+      if (hasOverlap(
+        { x: resizedComponent.x, y: resizedComponent.y },
+        { width: resizedComponent.width, height: resizedComponent.height },
+        { x: otherComponent.x, y: otherComponent.y },
+        { width: otherComponent.width, height: otherComponent.height }
+      )) {
+        return { affected: [], canResize: false }
+      }
+    }
+
+    return { affected: [], canResize: true }
+  }
 }
 
 // 智能验证位置（考虑动态布局）
@@ -461,7 +643,8 @@ export function validatePositionWithLayout(
   position: Position,
   size: Size,
   containerInfo: ContainerInfo,
-  gridConfig: GridConfig
+  gridConfig: GridConfig,
+  resizeType?: string
 ): { valid: boolean; affectedComponents: ComponentItemModel[] } {
   const { width: containerWidth, height: containerHeight } = containerInfo
 
@@ -485,7 +668,8 @@ export function validatePositionWithLayout(
     position,
     size,
     containerInfo,
-    gridConfig
+    gridConfig,
+    resizeType
   )
 
   return { valid: canResize, affectedComponents: affected }
@@ -554,65 +738,6 @@ export function validateDragPosition(
     }
   }
 
-  // 检查是否需要触发布局调整（仅当距离很近时）
-  const needsLayoutAdjustment = shouldTriggerLayout(
-    currentComponent,
-    snappedPosition,
-    currentSize,
-    components,
-    gridConfig.gap
-  )
-
-  if (!needsLayoutAdjustment) {
-    // 没有重叠且不需要布局调整，可以自由拖拽
-    return { valid: true, affectedComponents: [], finalPosition: snappedPosition }
-  }
-
-  // 需要布局调整，但要确保调整后不会产生重叠
-  const draggedComponent = {
-    ...currentComponent,
-    x: snappedPosition.x,
-    y: snappedPosition.y
-  }
-
-  const tempComponents = components.map(comp =>
-    comp.id === currentId ? draggedComponent : { ...comp }
-  )
-
-  const layoutSuccess = reorganizeLayout(tempComponents, containerInfo, gridConfig, true, false)
-
-  if (!layoutSuccess) {
-    return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
-  }
-
-  // 验证布局后是否有重叠
-  for (let i = 0; i < tempComponents.length; i++) {
-    for (let j = i + 1; j < tempComponents.length; j++) {
-      const comp1 = tempComponents[i]
-      const comp2 = tempComponents[j]
-
-      if (comp1 && comp2 && hasOverlap(
-        { x: comp1.x, y: comp1.y },
-        { width: comp1.width, height: comp1.height },
-        { x: comp2.x, y: comp2.y },
-        { width: comp2.width, height: comp2.height }
-      )) {
-        // 布局后仍有重叠，拒绝此操作
-        return { valid: false, affectedComponents: [], finalPosition: snappedPosition }
-      }
-    }
-  }
-
-  // 找出位置发生变化的组件
-  const affected: ComponentItemModel[] = []
-  components.forEach(comp => {
-    if (comp.id !== currentId) {
-      const tempComp = tempComponents.find(tc => tc.id === comp.id)
-      if (tempComp && (tempComp.x !== comp.x || tempComp.y !== comp.y)) {
-        affected.push({ ...comp, x: tempComp.x, y: tempComp.y })
-      }
-    }
-  })
-
-  return { valid: true, affectedComponents: affected, finalPosition: snappedPosition }
+  // 没有重叠，可以自由拖拽
+  return { valid: true, affectedComponents: [], finalPosition: snappedPosition }
 }
