@@ -14,18 +14,24 @@ export default defineConfig({
     },
     rollupOptions: {
       external: ['vue'],
-      output: {
-        exports: 'named',
-        globals: {
-          vue: 'Vue'
+      output: [
+        {
+          format: 'es',
+          entryFileNames: 'index.es.js',
+          exports: 'named',
+          assetFileNames: 'style.css'
         },
-        assetFileNames: (assetInfo) => {
-          if (assetInfo.name && assetInfo.name.endsWith('.css')) {
-            return 'style.css'
-          }
-          return assetInfo.name || 'asset'
+        {
+          format: 'umd',
+          entryFileNames: 'index.umd.js',
+          name: 'GridDrag',
+          exports: 'named',
+          globals: {
+            vue: 'Vue'
+          },
+          assetFileNames: 'style.css'
         }
-      }
+      ]
     },
     cssCodeSplit: false,
     sourcemap: true,

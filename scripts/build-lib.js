@@ -33,6 +33,7 @@ console.log('📦 Copying package.json to lib directory...')
 const packageJsonContent = {
   "name": "grid-drag",
   "version": "1.0.0",
+  "type": "module",
   "description": "A Vue 3 drag-and-drop grid component library",
   "main": "index.umd.js",
   "module": "index.es.js",
@@ -50,11 +51,14 @@ const packageJsonContent = {
   ],
   "exports": {
     ".": {
+      "types": "./index.d.ts",
       "import": "./index.es.js",
       "require": "./index.umd.js",
-      "types": "./index.d.ts"
+      "default": "./index.es.js"
     },
-    "./style.css": "./style.css"
+    "./style.css": {
+      "default": "./style.css"
+    }
   },
   "keywords": [
     "vue",
