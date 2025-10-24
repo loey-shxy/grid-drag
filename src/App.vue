@@ -14,7 +14,7 @@
             </span>
           </div>
           <div class="component-body">
-            {{ getComponentDescription(itemData.type) }}
+            {{ getComponentDescription(itemData.type!) }}
           </div>
         </div>
       </div>
@@ -37,8 +37,8 @@
 </template>
 <script lang="ts" setup>
 import { onMounted, ref, useId } from 'vue';
-import type { ComponentItemModel } from '../packages/src/types/layout';
-import { GridDrag } from '../packages/src/index';
+import type { ComponentItemModel } from '../packages/types/layout';
+import { GridDrag } from '../packages/index';
 
 interface Component {
   icon?: string
@@ -246,9 +246,9 @@ const getComponentDescription = (type: string) => {
 
 onMounted(() => {
   componentLibrary.value.forEach((item) => {
-    item.icon = getComponentIcon(item.type)
-    item.color = getComponentColor(item.type)
-    item.desc = getComponentTypeText(item.type)
+    item.icon = getComponentIcon(item.type!)
+    item.color = getComponentColor(item.type!)
+    item.desc = getComponentTypeText(item.type!)
   })
 })
 </script>

@@ -1,4 +1,4 @@
-import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from "../types/layout";
+import { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
 export declare function findAvailablePosition(components: ComponentItemModel[], newComponent: ComponentItemModel, containerInfo: ContainerInfo, gridConfig: GridConfig): Position | null;
 export declare function snapToColumnGridWithSmartHeight(position: Position, componentSize: Size, components: ComponentItemModel[], currentId: string, containerInfo: ContainerInfo, gridConfig: GridConfig): Position;
 export declare function reorganizeLayout(components: ComponentItemModel[], containerInfo: ContainerInfo, gridConfig: GridConfig, skipAutoFill?: boolean, onlyOnSizeIncrease?: boolean): boolean;

@@ -28,67 +28,6 @@ execSync('vue-tsc --project tsconfig.lib.json', {
   cwd: rootDir
 })
 
-// 复制发布用的package.json
-console.log('📦 Copying package.json to lib directory...')
-const packageJsonContent = {
-  "name": "grid-drag",
-  "version": "1.0.0",
-  "type": "module",
-  "description": "A Vue 3 drag-and-drop grid component library",
-  "main": "index.umd.js",
-  "module": "index.es.js",
-  "types": "index.d.ts",
-  "files": [
-    "index.es.js",
-    "index.es.js.map",
-    "index.umd.js", 
-    "index.umd.js.map",
-    "style.css",
-    "index.d.ts",
-    "components/",
-    "types/",
-    "utils/"
-  ],
-  "exports": {
-    ".": {
-      "types": "./index.d.ts",
-      "import": "./index.es.js",
-      "require": "./index.umd.js",
-      "default": "./index.es.js"
-    },
-    "./style.css": {
-      "default": "./style.css"
-    }
-  },
-  "keywords": [
-    "vue",
-    "vue3", 
-    "drag",
-    "drop",
-    "grid",
-    "component",
-    "ui"
-  ],
-  "author": "",
-  "license": "MIT",
-  "peerDependencies": {
-    "vue": "^3.0.0"
-  },
-  "repository": {
-    "type": "git",
-    "url": ""
-  },
-  "homepage": "",
-  "bugs": {
-    "url": ""
-  }
-}
-
-writeFileSync(
-  resolve(libDir, 'package.json'), 
-  JSON.stringify(packageJsonContent, null, 2)
-)
-
 console.log('✅ Library build completed!')
 console.log('📁 Output directory: lib/')
 console.log('📋 Files generated:')
