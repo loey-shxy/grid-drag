@@ -321,6 +321,75 @@ export function resizeComponentWithAutoFill(
   }
 }
 
+// 专门处理左侧延展的函数，确保栅格对齐和边距处理
+export function handleLeftResize(
+  component: ComponentItemModel,
+  newWidth: number,
+  components: ComponentItemModel[],
+  gridConfig: GridConfig,
+  containerInfo: ContainerInfo
+): { x: number; width: number; valid: boolean } {
+  const { gap, cellWidth } = gridConfig
+  const unitWidth = cellWidth + gap
+  
+  // 确保最小宽度
+  const minWidth = component.minWidth || cellWidth
+  const actualWidth = Math.max(newWidth, minWidth)
+  
+  // 应用栅格填充
+  const filledSize = resizeComponentWithAutoFill(component, { width: actualWidth, height: component.height }, gridConfig)
+  
+  // 计算新的X位置（保持右边缘不变）
+  const rightEdge = component.x + component.width
+  let newX = rightEdge - filledSize.width
+  
+  // 将X位置对齐到栅格
+  const alignedColumn = Math.round(newX / unitWidth)
+  newX = Math.max(0, alignedColumn * unitWidth)
+  
+  // 检查与左侧组件的碰撞和间距
+  const otherComponents = components.filter(c => c.id !== component.id)
+  
+  for (const comp of otherComponents) {
+    // 检查垂直重叠
+    const verticalOverlap = !(component.y + component.height <= comp.y || comp.y + comp.height <= component.y)
+    
+    if (verticalOverlap) {
+      // 检查是否在左侧
+      if (comp.x + comp.width <= component.x) {
+        const distance = newX - (comp.x + comp.width)
+        if (distance < gap) {
+          // 需要调整位置以保持间距
+          const minRequiredX = comp.x + comp.width + gap
+          const minColumn = Math.ceil(minRequiredX / unitWidth)
+          newX = Math.max(newX, minColumn * unitWidth)
+        }
+      }
+      
+      // 检查是否会与左侧组件重叠
+      if (newX < comp.x + comp.width && newX + filledSize.width > comp.x) {
+        return { x: component.x, width: component.width, valid: false }
+      }
+    }
+  }
+  
+  // 确保不超出容器边界
+  if (newX < 0) {
+    newX = 0
+    filledSize.width = rightEdge - newX
+  }
+  
+  if (newX + filledSize.width > containerInfo.width) {
+    return { x: component.x, width: component.width, valid: false }
+  }
+  
+  return {
+    x: parseFloat(newX.toFixed(3)),
+    width: parseFloat(filledSize.width.toFixed(3)),
+    valid: true
+  }
+}
+
 // 智能处理向右扩展宽度时的碰撞
 function handleRightExpansion(
   components: ComponentItemModel[],
