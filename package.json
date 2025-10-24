@@ -1,19 +1,15 @@
 {
   "name": "grid-drag",
-  "version": "1.0.1",
+  "version": "1.0.4",
   "private": false,
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "vue-tsc -b && vite build",
+    "build": "vite build",
     "preview": "vite preview"
   },
   "files": [
-    "lib",
-    "lib/style.css",
-    "Readme.md",
-    "package.json",
-    "LICENSE"
+    "lib"
   ],
   "dependencies": {
     "sass": "^1.93.2",
@@ -22,8 +18,7 @@
   },
   "main": "lib/index.umd.cjs",
   "module": "lib/index.js",
-  "types": "lib/packages/index.d.ts",
-  "source": "packages/index.ts",
+  "types": "lib/index.d.ts",
   "engines": {
     "node": ">=20.0.0"
   },

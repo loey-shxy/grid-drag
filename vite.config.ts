@@ -7,7 +7,11 @@ import dts from 'vite-plugin-dts'
 
 // https://vite.dev/config/
 export default defineConfig({
-  plugins: [vue(), vueJsx(), dts()],
+  plugins: [
+    vue(), 
+    vueJsx(), 
+    dts()
+  ],
   resolve: {
     alias: {
       '@': resolve(__dirname, './src'),
@@ -23,8 +27,8 @@ export default defineConfig({
     sourcemap: false,
     lib: {
       entry: resolve(__dirname, './packages/index.ts'),
-      name: 'grid-drag',
-      fileName: 'grid-drag'
+      name: 'GridDrag',
+      fileName: 'index'
     },
     rollupOptions: {
       // 确保外部化处理那些你不想打包进库的依赖

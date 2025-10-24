@@ -38,7 +38,8 @@
 <script lang="ts" setup>
 import { onMounted, ref, useId } from 'vue';
 import type { ComponentItemModel } from '../packages/types/layout';
-import { GridDrag } from '../packages/index';
+import  GridDrag from '../packages/components/GridDrag.vue'
+import '../packages/assets/style.scss'
 
 interface Component {
   icon?: string
