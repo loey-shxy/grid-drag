@@ -12,10 +12,10 @@ class LayoutManager {
   }
 
   private hasOverlap(pos1: Position, size1: Size, pos2: Position, size2: Size): boolean {
-    return pos1.x < pos2.x + size2.width && 
-           pos1.x + size1.width > pos2.x && 
-           pos1.y < pos2.y + size2.height && 
-           pos1.y + size1.height > pos2.y;
+    return pos1.x < pos2.x + size2.width &&
+      pos1.x + size1.width > pos2.x &&
+      pos1.y < pos2.y + size2.height &&
+      pos1.y + size1.height > pos2.y;
   }
 
   private calculateColumnSpan(componentWidth: number, unitWidth: number): number {
@@ -40,7 +40,7 @@ class LayoutManager {
 
       for (let i = startCol; i < endCol; i++) {
         if (i >= 0 && i < COLUMNS) {
-          columnHeights[i] = Math.max(columnHeights[i], compBottomY);
+          columnHeights[i] = Math.max(columnHeights[i] || 0, compBottomY);
         }
       }
     });
@@ -55,7 +55,7 @@ class LayoutManager {
 
     for (let startCol = 0; startCol <= COLUMNS - spanCols; startCol++) {
       const maxHeightInRange = Math.max(...columnHeights.slice(startCol, startCol + spanCols));
-      
+
       if (maxHeightInRange < minHeight) {
         minHeight = maxHeightInRange;
         bestStartCol = startCol;
@@ -96,7 +96,7 @@ class LayoutManager {
 
     // 验证新位置不与现有组件重叠
     const newPosition = { x: this.roundToThree(newX), y: this.roundToThree(newY) };
-    const hasOverlapWithExisting = components.some(existingComp => 
+    const hasOverlapWithExisting = components.some(existingComp =>
       this.hasOverlap(
         newPosition,
         { width: newComponent.width, height: newComponent.height },
@@ -131,7 +131,7 @@ class LayoutManager {
     const componentCols = this.calculateColumnSpan(componentSize.width, unitWidth);
     const maxColumn = COLUMNS - componentCols;
     const nearestColumn = Math.max(0, Math.min(Math.round(position.x / unitWidth), maxColumn));
-    
+
     const snappedX = this.getXFromColumn(nearestColumn, unitWidth);
     let snappedY = position.y;
 
@@ -144,9 +144,9 @@ class LayoutManager {
     });
 
     if (candidateComponents.length > 0) {
-      const closestComponent = candidateComponents.reduce((closest, comp) => {
+      const closestComponent = candidateComponents.reduce((closest: { comp: ComponentItemModel | null; distance: number }, comp) => {
         const distance = position.y - (comp.y + comp.height);
-        return distance >= 0 && distance < closest.distance ? 
+        return distance >= 0 && distance < closest.distance ?
           { comp, distance } : closest;
       }, { comp: null, distance: Infinity });
 
@@ -183,8 +183,6 @@ class LayoutManager {
       });
       return true;
     }
-
-    const columnWidth = (containerWidth - (COLUMNS - 1) * gap) / COLUMNS;
     const unitWidth = this.getUnitWidth(gridConfig);
     const columnHeights: number[] = new Array(COLUMNS).fill(0);
 
@@ -217,7 +215,7 @@ class LayoutManager {
   public autoFillComponentToGrid(component: ComponentItemModel, gridConfig: GridConfig): void {
     const { cellWidth, gap } = gridConfig;
     const unitWidth = this.getUnitWidth(gridConfig);
-    
+
     const minWidth = component.minWidth || cellWidth;
     const minHeight = component.minHeight || MIN_HEIGHT;
 
@@ -267,23 +265,23 @@ class LayoutManager {
   ): { x: number; width: number; valid: boolean } {
     const { gap, cellWidth } = gridConfig;
     const unitWidth = this.getUnitWidth(gridConfig);
-    
+
     const minWidth = component.minWidth || cellWidth;
     const actualWidth = Math.max(newWidth, minWidth);
-    
+
     const filledSize = this.resizeComponentWithAutoFill(component, { width: actualWidth, height: component.height }, gridConfig);
-    
+
     const rightEdge = component.x + component.width;
     let newX = rightEdge - filledSize.width;
-    
+
     const alignedColumn = Math.round(newX / unitWidth);
     newX = Math.max(0, alignedColumn * unitWidth);
-    
+
     const otherComponents = components.filter(c => c.id !== component.id);
-    
+
     for (const comp of otherComponents) {
       const verticalOverlap = !(component.y + component.height <= comp.y || comp.y + comp.height <= component.y);
-      
+
       if (verticalOverlap) {
         if (comp.x + comp.width <= component.x) {
           const distance = newX - (comp.x + comp.width);
@@ -293,22 +291,22 @@ class LayoutManager {
             newX = Math.max(newX, minColumn * unitWidth);
           }
         }
-        
+
         if (newX < comp.x + comp.width && newX + filledSize.width > comp.x) {
           return { x: component.x, width: component.width, valid: false };
         }
       }
     }
-    
+
     if (newX < 0) {
       newX = 0;
       filledSize.width = rightEdge - newX;
     }
-    
+
     if (newX + filledSize.width > containerInfo.width) {
       return { x: component.x, width: component.width, valid: false };
     }
-    
+
     return {
       x: this.roundToThree(newX),
       width: this.roundToThree(filledSize.width),
@@ -328,7 +326,6 @@ class LayoutManager {
     const affected: ComponentItemModel[] = [];
     const { width: containerWidth, height: containerHeight } = containerInfo;
     const { gap } = gridConfig;
-
     const resizedComponent = {
       ...resizingComponent,
       x: newPosition.x,
@@ -337,11 +334,17 @@ class LayoutManager {
       height: newSize.height
     };
 
-    // 找到所有与调整后组件有垂直重叠且在右侧的组件
+    // 找到所有需要连锁移动的右侧组件：与调整后组件有垂直重叠且在右侧的组件
     const rightComponents = components.filter(comp => {
       if (comp.id === resizingComponent.id) return false;
-      const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y || comp.y + comp.height <= resizedComponent.y);
-      const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width - gap;
+
+      // 检查垂直重叠
+      const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y ||
+        comp.y + comp.height <= resizedComponent.y);
+
+      // 检查是否在原始组件的右侧
+      const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width + gap;
+
       return verticalOverlap && isOnRight;
     });
 
@@ -349,59 +352,81 @@ class LayoutManager {
       return { affected: [], canResize: true };
     }
 
+    // 按x坐标排序，从左到右处理
     rightComponents.sort((a, b) => a.x - b.x);
-    const newRightEdge = resizedComponent.x + resizedComponent.width;
-
-    // 检查碰撞并计算推动距离
-    let pushDistance = 0;
-    for (const comp of rightComponents) {
-      const requiredDistance = newRightEdge + gap - comp.x;
-      if (requiredDistance > 0) {
-        pushDistance = requiredDistance;
-        break;
-      }
-    }
-
-    if (pushDistance === 0) {
-      return { affected: [], canResize: true };
-    }
 
     const componentsToMove: ComponentItemModel[] = [];
     const componentsToWrap: ComponentItemModel[] = [];
 
-    // 处理右侧组件
+    // 计算推动距离：确保所有右侧组件都能安全移动
+    const newRightEdge = resizedComponent.x + resizedComponent.width;
+    let pushDistance = 0;
+
+    // 计算调整后组件与第一个右侧组件的碰撞距离
+    const firstRightComponent = rightComponents[0]!;
+    const requiredDistance = newRightEdge + gap - firstRightComponent.x;
+
+    if (requiredDistance <= 0) {
+      // 没有碰撞，不需要移动
+      return { affected: [], canResize: true };
+    }
+
+    pushDistance = requiredDistance;
+
+    // 检查连锁碰撞：确保推动后的组件不会相互碰撞
+    for (let i = 0; i < rightComponents.length - 1; i++) {
+      const currentComp = rightComponents[i]!;
+      const nextComp = rightComponents[i + 1];
+
+      const currentNewX = currentComp.x + pushDistance;
+      const currentNewRightEdge = currentNewX + currentComp.width;
+      const requiredGapToNext = nextComp ? currentNewRightEdge + gap - nextComp.x : 0;
+
+      if (requiredGapToNext > 0) {
+        // 当前组件推动后会与下一个组件碰撞，需要增加推动距离
+        pushDistance += requiredGapToNext;
+      }
+    }
+
+    // 所有右侧组件都需要按相同距离移动（连锁反应）
     for (const comp of rightComponents) {
       const newX = comp.x + pushDistance;
+
+      // 检查推动后是否超出容器宽度
       if (newX + comp.width > containerWidth) {
-        componentsToWrap.push(comp);
+        // 需要换行
+        pushDistance = 0
+
+        // 换行的组件保持在最右侧
+        componentsToWrap.push({
+          ...comp,
+          x: containerWidth - comp.width
+        });
       } else {
+        // 可以推动到新位置
         componentsToMove.push({ ...comp, x: newX, y: comp.y });
       }
     }
 
     // 处理需要换行的组件
     if (componentsToWrap.length > 0) {
-      const allComponents = [
-        ...components.filter(c => c.id !== resizingComponent.id && !rightComponents.some(rc => rc.id === c.id)),
-        resizedComponent,
-        ...componentsToMove
-      ];
-
-      componentsToWrap.sort((a, b) => a.x - b.x);
-
+      // 停止条件1：右侧组件到达容器右边缘并无法换行
       for (const comp of componentsToWrap) {
-        const newY = this.findPositionBelowComponent(allComponents, comp, gridConfig);
+        const tempAllComponents = [
+          ...components.filter(c => c.id !== resizingComponent.id && !rightComponents.some(rc => rc.id === c.id)),
+          resizedComponent,
+          ...componentsToMove
+        ];
+
+        const newY = this.findPositionBelowComponent(tempAllComponents, comp, gridConfig);
+
+        // 如果换行后超出容器高度，说明无法换行
         if (newY + comp.height > containerHeight) {
-          const rightmostX = containerWidth - comp.width;
-          const movedComponent = { ...comp, x: rightmostX, y: comp.y };
-          componentsToMove.push(movedComponent);
-          allComponents.push(movedComponent);
           return { affected: [], canResize: false };
-        } else {
-          const movedComponent = { ...comp, x: comp.x, y: newY };
-          componentsToMove.push(movedComponent);
-          allComponents.push(movedComponent);
         }
+
+        const wrappedComponent = { ...comp, x: comp.x, y: newY };
+        componentsToMove.push(wrappedComponent);
       }
     }
 
