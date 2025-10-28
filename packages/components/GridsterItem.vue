@@ -23,7 +23,7 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
 import type { ComponentItemModel, GridConfig, Position, Size, ContainerInfo } from '../types/layout';
-import { resizeComponentWithAutoFill, handleLeftResize } from '../utils/grid'
+import { resizeComponentWithAutoFill } from '../utils/grid'
 import { MIN_HEIGHT, MIN_WIDTH } from '../utils/constant';
 
 interface Props {
@@ -146,10 +146,7 @@ const getOtherComponents = () => {
 // 检查与左侧组件的距离，并确保栅格对齐
 const checkLeftGap = (newX: number) => {
   const otherComponents = getOtherComponents()
-  const { gap, cellWidth } = props.gridConfig
-  const unitWidth = cellWidth + gap
-
-  let adjustedX = newX
+  const { gap } = props.gridConfig
 
   for (const comp of otherComponents) {
     // 检查是否在垂直方向有重叠
@@ -158,19 +155,15 @@ const checkLeftGap = (newX: number) => {
     if (verticalOverlap) {
       // 检查是否在左侧
       if (comp.x + comp.width <= props.component.x) {
-        const distance = adjustedX - (comp.x + comp.width)
+        const distance = newX - (comp.x + comp.width)
         if (distance < gap) {
-          // 计算需要的最小X坐标
-          const minRequiredX = comp.x + comp.width + gap
-          // 将最小X坐标对齐到栅格
-          const minColumn = Math.ceil(minRequiredX / unitWidth)
-          adjustedX = Math.max(adjustedX, minColumn * unitWidth)
+          return comp.x + comp.width + gap
         }
       }
     }
   }
-  
-  return adjustedX
+
+  return newX
 }
 
 // 检查与上方组件的距离
@@ -238,25 +231,10 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'left':
         // 左边缘：改变宽度，从左侧变化，右边缘保持不变
-        const tentativeWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
-        
-        // 使用专门的左侧延展处理函数
-        const leftResizeResult = handleLeftResize(
-          props.component,
-          tentativeWidth,
-          props.allComponents || [],
-          props.gridConfig,
-          props.containerInfo
-        )
-        
-        if (leftResizeResult.valid) {
-          newX = leftResizeResult.x
-          newWidth = leftResizeResult.width
-        } else {
-          // 如果无法调整，保持原始尺寸
-          newX = startXPos
-          newWidth = startWidth
-        }
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
+        newX = startXPos + startWidth - newWidth
+        // newX = checkLeftGap(newX)
+        newWidth = startXPos + startWidth - newX
         break
 
       case 'bottom':
@@ -271,7 +249,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         // 调整位置以保持下边缘不变
         newY = startYPos + startHeight - newHeight
         // 检查与上方组件的gap距离
-        newY = checkTopGap(newY)
+        // newY = checkTopGap(newY)
         // 根据调整后的Y重新计算高度
         newHeight = startYPos + startHeight - newY
         break
@@ -283,7 +261,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         // 调整Y位置以保持底部不变
         newY = startYPos + startHeight - newHeight
         // 检查与上方组件的gap距离
-        newY = checkTopGap(newY)
+        // newY = checkTopGap(newY)
         // 根据调整后的Y重新计算高度
         newHeight = startYPos + startHeight - newY
         // X位置不变（左侧不变）
@@ -291,64 +269,31 @@ const onResizeStart = (type: string, e: MouseEvent) => {
 
       case 'top-left':
         // 左上角：右侧和底部不变
-        const tentativeWidthTL = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
-        const tentativeHeightTL = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight - deltaY)
-        
-        // 处理左侧宽度调整
-        const leftResizeResultTL = handleLeftResize(
-          props.component,
-          tentativeWidthTL,
-          props.allComponents || [],
-          props.gridConfig,
-          props.containerInfo
-        )
-        
-        // 处理上侧高度调整
-        let tentativeYTL = startYPos + startHeight - tentativeHeightTL
-        const checkedYTL = checkTopGap(tentativeYTL)
-        
-        if (leftResizeResultTL.valid) {
-          newX = leftResizeResultTL.x
-          newWidth = leftResizeResultTL.width
-          newY = checkedYTL
-          newHeight = startYPos + startHeight - newY
-          
-          // 确保高度不小于最小值
-          if (newHeight < (props.component.minHeight || MIN_HEIGHT)) {
-            newHeight = props.component.minHeight || MIN_HEIGHT
-            newY = startYPos + startHeight - newHeight
-          }
-        } else {
-          // 如果左侧调整失败，保持原始位置和尺寸
-          newX = startXPos
-          newY = startYPos
-          newWidth = startWidth
-          newHeight = startHeight
-        }
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
+        newX = startXPos + startWidth - newWidth
+        // newX = checkLeftGap(newX)
+        newWidth = startXPos + startWidth - newX
+
+        // 上边缘：改变高度，从上侧变化，下边缘保持不变
+        newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight - deltaY)
+        // 调整位置以保持下边缘不变
+        newY = startYPos + startHeight - newHeight
+        // 检查与上方组件的gap距离
+        // newY = checkTopGap(newY)
+        // 根据调整后的Y重新计算高度
+        newHeight = startYPos + startHeight - newY
+
         break
 
       case 'bottom-left':
         // 左下角：右侧和上侧不变
-        const tentativeWidthBL = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
         newHeight = Math.max(props.component.minHeight || MIN_HEIGHT, startHeight + deltaY)
-        
+
         // 使用专门的左侧延展处理函数
-        const leftResizeResultBL = handleLeftResize(
-          props.component,
-          tentativeWidthBL,
-          props.allComponents || [],
-          props.gridConfig,
-          props.containerInfo
-        )
-        
-        if (leftResizeResultBL.valid) {
-          newX = leftResizeResultBL.x
-          newWidth = leftResizeResultBL.width
-        } else {
-          // 如果左侧调整失败，保持原始X位置和宽度
-          newX = startXPos
-          newWidth = startWidth
-        }
+        newWidth = Math.max(props.component.minWidth || MIN_WIDTH, startWidth - deltaX)
+        newX = startXPos + startWidth - newWidth
+        // newX = checkLeftGap(newX)
+        newWidth = startXPos + startWidth - newX
         // Y位置不变（上侧不变）
         break
 
@@ -405,7 +350,7 @@ const onResizeStart = (type: string, e: MouseEvent) => {
         { width: newWidth, height: newHeight },
         props.gridConfig
       )
-      
+
       // 对于左侧调整，需要重新计算X位置以保持右边缘不变
       if (type.includes('left')) {
         const rightEdge = newX + newWidth // 原始右边缘位置
@@ -423,10 +368,6 @@ const onResizeStart = (type: string, e: MouseEvent) => {
     if (newY + filledSize.height > containerHeight) {
       filledSize.height = containerHeight - newY
     }
-
-    // 确保最终尺寸不小于最小值
-    filledSize.width = Math.max(props.component.minWidth || MIN_WIDTH, filledSize.width)
-    filledSize.height = Math.max(props.component.minHeight || MIN_HEIGHT, filledSize.height)
 
     // 发射 resize 事件
     emit('resize', props.component.id, {

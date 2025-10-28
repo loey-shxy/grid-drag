@@ -256,62 +256,119 @@ class LayoutManager {
   }
 
   // 左侧延展处理
-  public handleLeftResize(
-    component: ComponentItemModel,
-    newWidth: number,
+  public handleLeftExpansion(
     components: ComponentItemModel[],
-    gridConfig: GridConfig,
-    containerInfo: ContainerInfo
-  ): { x: number; width: number; valid: boolean } {
-    const { gap, cellWidth } = gridConfig;
-    const unitWidth = this.getUnitWidth(gridConfig);
+    resizingComponent: ComponentItemModel,
+    newPosition: Position,
+    newSize: Size,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ):  { affected: ComponentItemModel[]; canResize: boolean } {
+    const affected: ComponentItemModel[] = [];
+    const { height: containerHeight } = containerInfo;
+    const { gap } = gridConfig;
+    const resizedComponent = {
+      ...resizingComponent,
+      x: newPosition.x,
+      y: newPosition.y,
+      width: newSize.width,
+      height: newSize.height
+    };
 
-    const minWidth = component.minWidth || cellWidth;
-    const actualWidth = Math.max(newWidth, minWidth);
+     // 找到所有需要连锁移动的左侧侧组件：与调整后组件有垂直重叠且在左侧侧的组件
+    const leftComponents = components.filter(comp => {
+      if (comp.id === resizingComponent.id) return false;
 
-    const filledSize = this.resizeComponentWithAutoFill(component, { width: actualWidth, height: component.height }, gridConfig);
+      // 检查垂直重叠
+      const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y ||
+        comp.y + comp.height <= resizedComponent.y);
 
-    const rightEdge = component.x + component.width;
-    let newX = rightEdge - filledSize.width;
+      // 检查是否在原始组件的左侧侧
+      const isOnLeft = comp.x + comp.width + gap <= resizingComponent.x;
 
-    const alignedColumn = Math.round(newX / unitWidth);
-    newX = Math.max(0, alignedColumn * unitWidth);
+      return verticalOverlap && isOnLeft;
+    });
 
-    const otherComponents = components.filter(c => c.id !== component.id);
+    if (leftComponents.length === 0) {
+      return { affected: [], canResize: true };
+    }
+    // 按x坐标排序，从右到左处理
+    leftComponents.sort((a, b) => b.x - a.x);
 
-    for (const comp of otherComponents) {
-      const verticalOverlap = !(component.y + component.height <= comp.y || comp.y + comp.height <= component.y);
+    const componentsToMove: ComponentItemModel[] = [];
+    const componentsToWrap: ComponentItemModel[] = [];
 
-      if (verticalOverlap) {
-        if (comp.x + comp.width <= component.x) {
-          const distance = newX - (comp.x + comp.width);
-          if (distance < gap) {
-            const minRequiredX = comp.x + comp.width + gap;
-            const minColumn = Math.ceil(minRequiredX / unitWidth);
-            newX = Math.max(newX, minColumn * unitWidth);
-          }
-        }
+    // 计算推动距离：确保所有左侧组件都能安全移动
+    let pushDistance = 0;
 
-        if (newX < comp.x + comp.width && newX + filledSize.width > comp.x) {
-          return { x: component.x, width: component.width, valid: false };
-        }
+    // 计算调整后组件与最后左侧组件的碰撞距离
+    const firstLeftComponent = leftComponents[0]!;
+    const requiredDistance = firstLeftComponent.x + firstLeftComponent.width + gap - resizedComponent.x
+    
+    if (requiredDistance <= 0) {
+      // 没有碰撞，不需要移动
+      return { affected: [], canResize: true };
+    }
+
+    pushDistance = requiredDistance;
+
+     // 检查连锁碰撞：确保推动后的组件不会相互碰撞
+    for (let i = 0; i < leftComponents.length - 1; i++) {
+      const currentComp = leftComponents[i]!;
+      const nextComp = leftComponents[i + 1];
+
+      const currentNewX = currentComp.x - pushDistance;
+      const requiredGapToNext = nextComp ? nextComp.x + nextComp.width + gap - currentNewX : 0;
+
+      if (requiredGapToNext > 0) {
+        // 当前组件推动后会与下一个组件碰撞，需要增加推动距离
+        pushDistance += requiredGapToNext;
       }
     }
 
-    if (newX < 0) {
-      newX = 0;
-      filledSize.width = rightEdge - newX;
+    // 所有左侧侧组件都需要按相同距离移动（连锁反应）
+    for (const comp of leftComponents) {
+      const newX = comp.x - pushDistance;
+
+      if (newX < 0) {
+        // 需要换行
+        pushDistance = 0
+
+        // 换行的组件保持在最左侧
+        componentsToWrap.push({
+          ...comp,
+          x: 0
+        });
+      } else {
+        // 可以推动到新位置
+        componentsToMove.push({ ...comp, x: newX, y: comp.y });
+      }
     }
 
-    if (newX + filledSize.width > containerInfo.width) {
-      return { x: component.x, width: component.width, valid: false };
+    // 处理需要换行的组件
+    if (componentsToWrap.length > 0) {
+      for (const comp of componentsToWrap) {
+        const tempAllComponents = [
+          ...components.filter(c => c.id !== resizingComponent.id && !leftComponents.some(rc => rc.id === c.id)),
+          resizedComponent,
+          ...componentsToMove
+        ];
+
+        const newY = this.findPositionBelowComponent(tempAllComponents, comp, gridConfig);
+
+        // 如果换行后超出容器高度，说明无法换行
+        if (newY + comp.height > containerHeight) {
+          return { affected: [], canResize: false };
+        }
+
+        const wrappedComponent = { ...comp, x: comp.x, y: newY };
+        componentsToMove.push(wrappedComponent);
+      }
     }
 
-    return {
-      x: this.roundToThree(newX),
-      width: this.roundToThree(filledSize.width),
-      valid: true
-    };
+    affected.push(...componentsToMove);
+
+    return { affected, canResize: true };
   }
 
   // 碰撞检测核心方法
@@ -495,6 +552,65 @@ class LayoutManager {
     return { affected, canResize: true };
   }
 
+  private handleTopExpansion(
+    components: ComponentItemModel[],
+    resizingComponent: ComponentItemModel,
+    newPosition: Position,
+    newSize: Size,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ): { affected: ComponentItemModel[]; canResize: boolean } {
+    const affected: ComponentItemModel[] = [];
+    const { gap } = gridConfig;
+
+    const resizedComponent = {
+      ...resizingComponent,
+      x: newPosition.x,
+      y: newPosition.y,
+      width: newSize.width,
+      height: newSize.height
+    };
+
+    // 找到所有与调整后组件有水平重叠且在上方的组件
+    const topComponents = components.filter(comp => {
+      if (comp.id === resizingComponent.id) return false;
+      const horizontalOverlap = !(resizedComponent.x + resizedComponent.width <= comp.x || comp.x + comp.width <= resizedComponent.x);
+      const isAbove = comp.y + comp.height + gap <= resizingComponent.y;
+      return horizontalOverlap && isAbove;
+    });
+
+    if (topComponents.length === 0) {
+      return { affected: [], canResize: true };
+    }
+
+    topComponents.sort((a, b) => b.y - a.y); // 从下到上排序
+
+    // 检查碰撞并计算推动距离
+    let pushDistance = 0;
+    for (const comp of topComponents) {
+      const requiredDistance = comp.y + comp.height + gap - resizedComponent.y;
+      if (requiredDistance > 0) {
+        pushDistance = requiredDistance;
+        break;
+      }
+    }
+
+    if (pushDistance === 0) {
+      return { affected: [], canResize: true };
+    }
+
+    // 推动上方组件
+    for (const comp of topComponents) {
+      const newY = comp.y - pushDistance;
+      if (newY < 0) {
+        return { affected: [], canResize: false };
+      }
+      affected.push({ ...comp, x: this.roundToThree(comp.x), y: this.roundToThree(newY) });
+    }
+
+    return { affected, canResize: true };
+  }
+
   private handleBottomRightExpansion(
     components: ComponentItemModel[],
     resizingComponent: ComponentItemModel,
@@ -525,6 +641,150 @@ class LayoutManager {
     const affectedIds = new Set<string>();
 
     for (const comp of rightResult.affected) {
+      allAffected.push(comp);
+      affectedIds.add(comp.id);
+    }
+
+    for (const comp of bottomResult.affected) {
+      if (!affectedIds.has(comp.id)) {
+        allAffected.push(comp);
+      } else {
+        const existingComp = allAffected.find(ac => ac.id === comp.id);
+        if (existingComp) {
+          existingComp.y = comp.y;
+        }
+      }
+    }
+
+    return { affected: allAffected, canResize: true };
+  }
+
+  private handleTopLeftExpansion(
+    components: ComponentItemModel[],
+    resizingComponent: ComponentItemModel,
+    newPosition: Position,
+    newSize: Size,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ): { affected: ComponentItemModel[]; canResize: boolean } {
+    // 先处理向左扩展
+    const leftResult = this.handleLeftExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!leftResult.canResize) {
+      return leftResult;
+    }
+
+    // 在临时列表基础上处理向上扩展
+    const tempComponents = components.map(comp => {
+      const affectedComp = leftResult.affected.find(ac => ac.id === comp.id);
+      return affectedComp ? { ...comp, x: affectedComp.x, y: affectedComp.y } : comp;
+    });
+
+    const topResult = this.handleTopExpansion(tempComponents, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!topResult.canResize) {
+      return topResult;
+    }
+
+    // 合并两个方向的影响组件
+    const allAffected: ComponentItemModel[] = [];
+    const affectedIds = new Set<string>();
+
+    for (const comp of leftResult.affected) {
+      allAffected.push(comp);
+      affectedIds.add(comp.id);
+    }
+
+    for (const comp of topResult.affected) {
+      if (!affectedIds.has(comp.id)) {
+        allAffected.push(comp);
+      } else {
+        const existingComp = allAffected.find(ac => ac.id === comp.id);
+        if (existingComp) {
+          existingComp.y = comp.y;
+        }
+      }
+    }
+
+    return { affected: allAffected, canResize: true };
+  }
+
+  private handleTopRightExpansion(
+    components: ComponentItemModel[],
+    resizingComponent: ComponentItemModel,
+    newPosition: Position,
+    newSize: Size,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ): { affected: ComponentItemModel[]; canResize: boolean } {
+    // 先处理向右扩展
+    const rightResult = this.handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!rightResult.canResize) {
+      return rightResult;
+    }
+
+    // 在临时列表基础上处理向上扩展
+    const tempComponents = components.map(comp => {
+      const affectedComp = rightResult.affected.find(ac => ac.id === comp.id);
+      return affectedComp ? { ...comp, x: affectedComp.x, y: affectedComp.y } : comp;
+    });
+
+    const topResult = this.handleTopExpansion(tempComponents, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!topResult.canResize) {
+      return topResult;
+    }
+
+    // 合并两个方向的影响组件
+    const allAffected: ComponentItemModel[] = [];
+    const affectedIds = new Set<string>();
+
+    for (const comp of rightResult.affected) {
+      allAffected.push(comp);
+      affectedIds.add(comp.id);
+    }
+
+    for (const comp of topResult.affected) {
+      if (!affectedIds.has(comp.id)) {
+        allAffected.push(comp);
+      } else {
+        const existingComp = allAffected.find(ac => ac.id === comp.id);
+        if (existingComp) {
+          existingComp.y = comp.y;
+        }
+      }
+    }
+
+    return { affected: allAffected, canResize: true };
+  }
+
+  private handleBottomLeftExpansion(
+    components: ComponentItemModel[],
+    resizingComponent: ComponentItemModel,
+    newPosition: Position,
+    newSize: Size,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ): { affected: ComponentItemModel[]; canResize: boolean } {
+    // 先处理向左扩展
+    const leftResult = this.handleLeftExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!leftResult.canResize) {
+      return leftResult;
+    }
+
+    // 在临时列表基础上处理向下扩展
+    const tempComponents = components.map(comp => {
+      const affectedComp = leftResult.affected.find(ac => ac.id === comp.id);
+      return affectedComp ? { ...comp, x: affectedComp.x, y: affectedComp.y } : comp;
+    });
+
+    const bottomResult = this.handleBottomExpansion(tempComponents, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+    if (!bottomResult.canResize) {
+      return bottomResult;
+    }
+
+    // 合并两个方向的影响组件
+    const allAffected: ComponentItemModel[] = [];
+    const affectedIds = new Set<string>();
+
+    for (const comp of leftResult.affected) {
       allAffected.push(comp);
       affectedIds.add(comp.id);
     }
@@ -584,12 +844,41 @@ class LayoutManager {
     gridConfig: GridConfig,
     resizeType?: string
   ): { affected: ComponentItemModel[]; canResize: boolean } {
+    console.log(newSize, resizingComponent.width)
     const widthIncreased = newSize.width > resizingComponent.width;
     const heightIncreased = newSize.height > resizingComponent.height;
     const positionChanged = newPosition.x !== resizingComponent.x || newPosition.y !== resizingComponent.y;
 
-    // 如果位置改变了，使用重叠检查
-    if (positionChanged) {
+    // 优先根据 resizeType 处理调整大小的情况
+    if (resizeType) {
+      console.log(resizeType, widthIncreased, heightIncreased)
+
+      // 处理各种调整大小的情况
+      if (resizeType === 'bottom-right' && widthIncreased && heightIncreased) {
+        return this.handleBottomRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (widthIncreased && resizeType.includes('right')) {
+        return this.handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (heightIncreased && resizeType.includes('bottom')) {
+        return this.handleBottomExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (widthIncreased && resizeType.includes('left')) {
+        return this.handleLeftExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (heightIncreased && resizeType.includes('top')) {
+        // 处理向上扩展的情况
+        return this.handleTopExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (resizeType.includes('top') && resizeType.includes('left') && (widthIncreased || heightIncreased)) {
+        // 处理左上角扩展
+        return this.handleTopLeftExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (resizeType.includes('top') && resizeType.includes('right') && (widthIncreased || heightIncreased)) {
+        // 处理右上角扩展
+        return this.handleTopRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      } else if (resizeType.includes('bottom') && resizeType.includes('left') && (widthIncreased || heightIncreased)) {
+        // 处理左下角扩展
+        return this.handleBottomLeftExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
+      }
+    }
+
+    // 如果只是位置改变（拖拽移动），使用重叠检查
+    if (positionChanged && !widthIncreased && !heightIncreased) {
       const resizedComponent = {
         ...resizingComponent,
         x: newPosition.x,
@@ -612,36 +901,27 @@ class LayoutManager {
       return { affected: [], canResize: true };
     }
 
-    // 根据调整类型选择处理方式
-    if (resizeType === 'bottom-right' && widthIncreased && heightIncreased) {
-      return this.handleBottomRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
-    } else if (widthIncreased && (resizeType === 'right' || resizeType?.includes('right'))) {
-      return this.handleRightExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
-    } else if (heightIncreased && (resizeType === 'bottom' || resizeType?.includes('bottom'))) {
-      return this.handleBottomExpansion(components, resizingComponent, newPosition, newSize, containerInfo, gridConfig);
-    } else {
-      // 其他情况，检查重叠
-      const resizedComponent = {
-        ...resizingComponent,
-        x: newPosition.x,
-        y: newPosition.y,
-        width: newSize.width,
-        height: newSize.height
-      };
+    // 其他情况，检查重叠
+    const resizedComponent = {
+      ...resizingComponent,
+      x: newPosition.x,
+      y: newPosition.y,
+      width: newSize.width,
+      height: newSize.height
+    };
 
-      for (const otherComponent of components) {
-        if (otherComponent.id === resizingComponent.id) continue;
-        if (this.hasOverlap(
-          { x: resizedComponent.x, y: resizedComponent.y },
-          { width: resizedComponent.width, height: resizedComponent.height },
-          { x: otherComponent.x, y: otherComponent.y },
-          { width: otherComponent.width, height: otherComponent.height }
-        )) {
-          return { affected: [], canResize: false };
-        }
+    for (const otherComponent of components) {
+      if (otherComponent.id === resizingComponent.id) continue;
+      if (this.hasOverlap(
+        { x: resizedComponent.x, y: resizedComponent.y },
+        { width: resizedComponent.width, height: resizedComponent.height },
+        { x: otherComponent.x, y: otherComponent.y },
+        { width: otherComponent.width, height: otherComponent.height }
+      )) {
+        return { affected: [], canResize: false };
       }
-      return { affected: [], canResize: true };
     }
+    return { affected: [], canResize: true };
   }
 
   // 智能验证位置
@@ -821,7 +1101,6 @@ export const snapToColumnGridWithSmartHeight = layoutManager.snapToColumnGridWit
 export const reorganizeLayout = layoutManager.reorganizeLayout.bind(layoutManager);
 export const autoFillComponentToGrid = layoutManager.autoFillComponentToGrid.bind(layoutManager);
 export const resizeComponentWithAutoFill = layoutManager.resizeComponentWithAutoFill.bind(layoutManager);
-export const handleLeftResize = layoutManager.handleLeftResize.bind(layoutManager);
 export const getAffectedComponents = layoutManager.getAffectedComponents.bind(layoutManager);
 export const validatePositionWithLayout = layoutManager.validatePositionWithLayout.bind(layoutManager);
 export const validateDragPosition = layoutManager.validateDragPosition.bind(layoutManager);

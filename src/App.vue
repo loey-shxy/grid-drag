@@ -282,6 +282,8 @@ onMounted(() => {
   padding: 2px 6px;
   border-radius: 4px;
   white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .component-icon {

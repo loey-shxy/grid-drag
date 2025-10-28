@@ -211,13 +211,8 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
   // 根据调整类型决定是否应用自动填充
   let filledSize = newSize
   const resizeType = newData.resizeType || ''
-  const isWidthResize = ['left', 'right', 'top-left', 'top-right', 'bottom-left', 'bottom-right'].includes(resizeType)
 
-  if (isWidthResize) {
-    // 只有在调整宽度相关的操作时才进行栅格填充
-    filledSize = resizeComponentWithAutoFill(component, newSize, gridConfig)
-  }
-
+  console.log(components)
   // 使用智能验证（考虑动态布局）
   const validationResult = validatePositionWithLayout(
     components.value,
@@ -246,8 +241,6 @@ const onComponentResize = (id: string, newData: Size & Partial<Position> & { res
       })
     }
 
-    // 新的碰撞检测逻辑已经在validatePositionWithLayout中处理了布局调整
-    // 不需要额外的reorganizeLayout调用
   } else {
     // 可以尝试只调整尺寸不调整位置
     const fallbackResult = validatePositionWithLayout(
