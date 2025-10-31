@@ -22,7 +22,7 @@
           <div class="components-grid">
             <div
               v-for="component in filteredComponents"
-              :key="component.id"
+              :key="component.i"
               class="component-card"
               :class="{
                 'selected': isSelected(component),
@@ -46,25 +46,25 @@
 
 <script setup lang="ts">
 import { ref, computed } from 'vue';
-import type { ComponentItemModel } from '../types/layout';
+import { type Layout, type LayoutItem } from '../helpers/utils';
 
 interface Props {
-  componentLibrary: ComponentItemModel[]
+  componentLibrary: Layout
 }
 const props = defineProps<Props>()
 const visible = ref(false)
-const selectedComponents  = ref<ComponentItemModel[]>([])
+const selectedComponents  = ref<Layout>([])
 
 interface Emits {
-  (e: 'confirm', components: ComponentItemModel[]): void
+  (e: 'confirm', components: Layout): void
   (e: 'cancel'): void
 }
 
 const emit = defineEmits<Emits>()
 
-const onComponentSelect = (component: ComponentItemModel) => {
+const onComponentSelect = (component: LayoutItem) => {
   const index = selectedComponents.value.findIndex(
-    item => item.id === component.id
+    item => item.i === component.i
   )
   
   if (index > -1) {
@@ -86,20 +86,20 @@ const filteredComponents = computed(() => {
   
   const query = searchQuery.value.toLowerCase()
   return props.componentLibrary.filter(component =>
-    component.name.toLowerCase().includes(query)
+    component.name!.toLowerCase().includes(query)
   )
 })
 
 // 检查组件是否被选中
-const isSelected = (component: ComponentItemModel) => {
+const isSelected = (component: LayoutItem) => {
   return selectedComponents.value.some(
-    selected => selected.id === component.id
+    selected => selected.i === component.i
   )
 }
 
-const onComponentClick = (component: ComponentItemModel) => {
+const onComponentClick = (component: LayoutItem) => {
     // 创建组件副本，确保每次添加都是新的实例
-    const componentCopy: ComponentItemModel = {
+    const componentCopy: LayoutItem = {
     ...component,
     x: 0,
     y: 0

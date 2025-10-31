@@ -1,175 +1,167 @@
 <template>
-  <GridDrag
-    :component-library="componentLibrary"
-    v-model:added-components="addedComponents"
-  >
-    <template #item="{ itemData }">
-      <div class="component-item">
-        <div class="component-content">
-          <div class="component-header">
-            <span class="component-name">{{ itemData.name }}</span>
-            <span class="component-size">
-              size: {{ itemData.width }} x {{ itemData.height }}
-              position: {{ itemData.x }} x {{ itemData.y }}
-            </span>
-          </div>
-          <div class="component-body">
-            {{ getComponentDescription(itemData.type!) }}
+  <div class="demo-container">
+    <GridHeader :component-library="componentLibrary" @confirm-add="addComponents" @save="saveLayout">
+      <template #component="{ component }">
+        <div class="component-preview" :style="getPreviewStyle(component)">
+          <div class="component-icon">
+            {{ getComponentIcon(component.type) }}
           </div>
         </div>
-      </div>
-    </template>
-    <template #component="{ component }">
-      <div class="component-preview" :style="getPreviewStyle(component)">
-        <div class="component-icon">
-          {{ getComponentIcon(component.type) }}
+
+        <div class="component-info">
+          <div class="component-name">{{ component.name }}</div>
+          <div class="component-size">
+            {{ component.w }} × {{ component.h }}
+          </div>
         </div>
-      </div>
-        
-      <div class="component-info">
-        <div class="component-name">{{ component.name }}</div>
-        <div class="component-size">
-          {{ component.width }} × {{ component.height }}
-        </div>
-      </div>
-    </template>
-  </GridDrag>
+      </template>
+    </GridHeader>
+    <div class="demo-content">
+      <GridLayout ref="gridLayoutRef" :layout.sync="layout" :col-num="24" :row-height="30" :prevent-overflow="true"
+        :is-bounded="true">
+        <GridItem v-for="item in layout" class="component-item" :key="item.i" :x="item.x" :y="item.y" :w="item.w"
+          :h="item.h" :i="item.i" :static="item.static" @remove="removeItem">
+          <div class="component-item">
+            <div class="component-content">
+              <div class="component-header">
+                <span class="component-name">{{ item.name }}</span>
+              </div>
+              <div class="component-body">
+                {{ getComponentDescription(item.type!) }}
+              </div>
+            </div>
+          </div>
+        </GridItem>
+      </GridLayout>
+    </div>
+  </div>
 </template>
 <script lang="ts" setup>
-import { onMounted, ref, useId } from 'vue';
-import type { ComponentItemModel } from '../packages/types/layout';
-import  GridDrag from '../packages/components/GridDrag.vue'
+import { onMounted, ref, useId, watch } from 'vue';
+import GridLayout from '../packages/components/GridLayout.vue'
+import GridItem from '../packages/components/GridItem.vue'
+import GridHeader from '../packages/components/GridHeader.vue'
+import {
+  gridItemWidthToColNum,
+  gridItemHeightToRowNum,
+  type Layout,
+  type LayoutItem
+} from '../packages/helpers';
+
 import '../packages/assets/style.scss'
 
-interface Component {
+const gridLayoutRef = ref()
+
+type Component = LayoutItem & {
+  name: string
+  type: string
   icon?: string
   color?: string
   desc?: string
 }
-type ComponentLibrary = Component & ComponentItemModel
 // 预定义的组件库
-const componentLibrary = ref<ComponentLibrary[]>([
+const componentLibrary = ref<Component[]>([
   {
-    type: 'chart-line',
+    type: 'line-bar',
     name: '折线图',
-    width: 400,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 400,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'chart-bar',
     name: '柱状图',
-    width: 350,   // 像素
-    height: 200,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 350,   // 像素
+    h: 200,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'chart-pie',
     name: '饼图',
-    width: 300,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'table',
     name: '数据表格',
-    width: 600,   // 像素
-    height: 400,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 600,   // 像素
+    h: 400,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'card',
     name: '数据卡片',
-    width: 300,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'metric',
     name: '指标卡',
-    width: 300,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'text',
     name: '文本组件',
-    width: 320,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 320,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'image',
     name: '图片组件',
-    width: 400,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 400,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   },
   {
     type: 'progress',
     name: '进度条',
-    width: 360,   // 像素
-    height: 300,  // 像素
-    minWidth: 200,
-    minHeight: 200,
-    id: useId(),
+    w: 360,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   }
 ])
 
-const addedComponents =  ref<ComponentItemModel[]>([])
-
 // 获取组件预览样式
-const getPreviewStyle = (component: ComponentLibrary) => {
+const getPreviewStyle = (component: Component) => {
   // 计算预览的宽高比例，保持视觉一致性
   const maxPreviewSize = 120
-  const aspectRatio = component.width / component.height
-  
+  const aspectRatio = component.w / component.h
+
   let previewWidth, previewHeight
-  
+
   if (aspectRatio > 1) {
     // 宽大于高
-    previewWidth = Math.min(maxPreviewSize, component.width / 3)
+    previewWidth = Math.min(maxPreviewSize, component.w / 3)
     previewHeight = previewWidth / aspectRatio
   } else {
     // 高大于宽或正方形
-    previewHeight = Math.min(maxPreviewSize, component.height / 3)
+    previewHeight = Math.min(maxPreviewSize, component.h / 3)
     previewWidth = previewHeight * aspectRatio
   }
-  
+
   return {
     width: `${previewWidth}px`,
     height: `${previewHeight}px`,
@@ -245,6 +237,108 @@ const getComponentDescription = (type: string) => {
   return descriptions[type] || '组件内容'
 }
 
+const layout = ref<Layout>([])
+const addComponents = (components: Layout) => {
+  // 转换组件尺寸为网格单位
+  const convertedComponents = components.map(item => ({
+    ...item,
+    w: gridItemWidthToColNum(
+      gridLayoutRef.value.width,
+      gridLayoutRef.value.colNum,
+      gridLayoutRef.value.margin[0],
+      item.w
+    ),
+    h: gridItemHeightToRowNum(
+      gridLayoutRef.value.rowHeightComputed,
+      gridLayoutRef.value.margin[1],
+      item.h
+    )
+  }))
+
+  // 使用智能添加方法
+  const result = gridLayoutRef.value.addItemsIntelligently(convertedComponents)
+
+  layout.value = [...layout.value, ...result.addedItems]
+  if (result.failedItems.length > 0) {
+    console.warn(`无法添加 ${result.failedItems.length} 个组件，容器空间不足`)
+    // 可以在这里添加用户提示
+  }
+
+  if (result.success) {
+    console.log(`成功添加 ${result.addedItems.length} 个组件`)
+  }
+}
+
+const removeItem = (id?: string) => {
+  if (id) {
+    const index = layout.value.findIndex(item => item.i === id)
+
+    if (index >= 0) {
+      layout.value.splice(index, 1)
+    }
+  }
+}
+
+/**
+ * 保存布局 - 直接获取已渲染的像素值
+ */
+const saveLayout = () => {
+  if (!gridLayoutRef.value) {
+    console.error('GridLayout 引用不存在')
+    return
+  }
+
+  // 获取所有GridItem组件的DOM元素
+  const gridItems = gridLayoutRef.value.$el.querySelectorAll('.gridster-item')
+
+  const pixelLayout = layout.value.map((item, index) => {
+    const gridItemEl = gridItems[index]
+    let pixelPosition = { x: 0, y: 0, width: 0, height: 0 }
+
+    if (gridItemEl) {
+      // 直接从DOM元素的getBoundingClientRect获取实际位置
+      const rect = gridItemEl.getBoundingClientRect()
+      const containerRect = gridLayoutRef.value.$el.getBoundingClientRect()
+
+      // 计算相对于容器的位置
+      pixelPosition.x = rect.left - containerRect.left
+      pixelPosition.y = rect.top - containerRect.top
+      pixelPosition.width = rect.width
+      pixelPosition.height = rect.height
+
+      // 减去容器的padding
+      const containerStyle = window.getComputedStyle(gridLayoutRef.value.$el.querySelector('.grid-content'))
+      const paddingLeft = parseFloat(containerStyle.paddingLeft) || 0
+      const paddingTop = parseFloat(containerStyle.paddingTop) || 0
+
+      pixelPosition.x -= paddingLeft
+      pixelPosition.y -= paddingTop
+    }
+
+    return {
+      i: item.i,
+      name: item.name,
+      type: (item as Component).type,
+      // 从DOM获取的实际像素值
+      x: pixelPosition.x,
+      y: pixelPosition.y,
+      w: pixelPosition.width,
+      h: pixelPosition.height,
+      // 保留其他属性
+      static: item.static,
+      minW: item.minW,
+      minH: item.minH,
+      maxW: item.maxW,
+      maxH: item.maxH
+    }
+  })
+
+  console.log('从DOM获取的像素布局:', pixelLayout)
+
+  // 可以在这里添加其他保存逻辑，比如发送到服务器
+  return pixelLayout
+}
+
 onMounted(() => {
   componentLibrary.value.forEach((item) => {
     item.icon = getComponentIcon(item.type!)
@@ -255,6 +349,18 @@ onMounted(() => {
 </script>
 
 <style lang="scss" scoped>
+.demo-container {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.demo-content {
+  flex: 1;
+  overflow: hidden;
+  /* 确保不出现滚动条 */
+}
+
 .component-preview {
   border-radius: 4px;
   display: flex;

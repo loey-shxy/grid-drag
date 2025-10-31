@@ -2,18 +2,18 @@ import type { Component, App } from 'vue'
 import './assets/style.scss'
 
 // Vue插件安装函数
-import GridDrag from './components/GridDrag.vue'
-import GridsterItem from './components/GridsterItem.vue'
-import AddComponent from './components/AddComponent.vue'
+import GridLayout from './components/GridLayout.vue'
+import GridItem from './components/GridItem.vue'
+import GridHeader from './components/GridHeader.vue'
 
-export * from './types/layout'
+export * from './helpers'
 
 const components: {
   [propName: string]: Component
 } = {
-  GridDrag,
-  GridsterItem,
-  AddComponent
+  GridLayout,
+  GridItem,
+  GridHeader
 }
 
 // 全局注册所有组件

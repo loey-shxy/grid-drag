@@ -372,6 +372,265 @@ class LayoutManager {
   }
 
   // 碰撞检测核心方法
+  // private handleRightExpansion(
+  //   components: ComponentItemModel[],
+  //   resizingComponent: ComponentItemModel,
+  //   newPosition: Position,
+  //   newSize: Size,
+  //   containerInfo: ContainerInfo,
+  //   gridConfig: GridConfig
+  // ): { affected: ComponentItemModel[]; canResize: boolean } {
+  //   const affected: ComponentItemModel[] = [];
+  //   const { width: containerWidth, height: containerHeight } = containerInfo;
+  //   const { gap } = gridConfig;
+  //   const resizedComponent = {
+  //     ...resizingComponent,
+  //     x: newPosition.x,
+  //     y: newPosition.y,
+  //     width: newSize.width,
+  //     height: newSize.height
+  //   };
+
+  //   // 找到所有需要连锁移动的右侧组件：与调整后组件有垂直重叠且在右侧的组件
+  //   const rightComponents = components.filter(comp => {
+  //     if (comp.id === resizingComponent.id) return false;
+
+  //     // 检查垂直重叠
+  //     const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y ||
+  //       comp.y + comp.height <= resizedComponent.y);
+
+  //     // 检查是否在原始组件的右侧
+  //     const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width + gap;
+
+  //     return verticalOverlap && isOnRight;
+  //   });
+
+  //   if (rightComponents.length === 0) {
+  //     return { affected: [], canResize: true };
+  //   }
+
+  //   // 按x坐标排序，从左到右处理
+  //   rightComponents.sort((a, b) => a.x - b.x);
+
+  //   const componentsToMove: ComponentItemModel[] = [];
+  //   const componentsToWrap: ComponentItemModel[] = [];
+
+  //   // 计算推动距离：确保所有右侧组件都能安全移动
+  //   const newRightEdge = resizedComponent.x + resizedComponent.width;
+  //   let pushDistance = 0;
+
+  //   // 计算调整后组件与第一个右侧组件的碰撞距离
+  //   const firstRightComponent = rightComponents[0]!;
+  //   const requiredDistance = newRightEdge + gap - firstRightComponent.x;
+
+  //   if (requiredDistance <= 0) {
+  //     // 没有碰撞，不需要移动
+  //     return { affected: [], canResize: true };
+  //   }
+
+  //   pushDistance = requiredDistance;
+
+  //   // 检查连锁碰撞：确保推动后的组件不会相互碰撞
+  //   for (let i = 0; i < rightComponents.length - 1; i++) {
+  //     const currentComp = rightComponents[i]!;
+  //     const nextComp = rightComponents[i + 1];
+
+  //     const currentNewX = currentComp.x + pushDistance;
+  //     const currentNewRightEdge = currentNewX + currentComp.width;
+  //     const requiredGapToNext = nextComp ? currentNewRightEdge + gap - nextComp.x : 0;
+
+  //     if (requiredGapToNext > 0) {
+  //       // 当前组件推动后会与下一个组件碰撞，需要增加推动距离
+  //       pushDistance += requiredGapToNext;
+  //     }
+  //   }
+
+  //   // 所有右侧组件都需要按相同距离移动（连锁反应）
+  //   for (const comp of rightComponents) {
+  //     const newX = comp.x + pushDistance;
+
+  //     // 检查推动后是否超出容器宽度
+  //     if (newX + comp.width > containerWidth) {
+  //       // 需要换行
+  //       pushDistance = 0
+
+  //       // 换行的组件保持在最右侧
+  //       componentsToWrap.push({
+  //         ...comp,
+  //         x: containerWidth - comp.width
+  //       });
+  //     } else {
+  //       // 可以推动到新位置
+  //       componentsToMove.push({ ...comp, x: newX, y: comp.y });
+  //     }
+  //   }
+
+  //   // 处理需要换行的组件
+  //   if (componentsToWrap.length > 0) {
+  //     // 停止条件1：右侧组件到达容器右边缘并无法换行
+  //     for (const comp of componentsToWrap) {
+  //       const tempAllComponents = [
+  //         ...components.filter(c => c.id !== resizingComponent.id && !rightComponents.some(rc => rc.id === c.id)),
+  //         resizedComponent,
+  //         ...componentsToMove
+  //       ];
+
+  //       const newY = this.findPositionBelowComponent(tempAllComponents, comp, gridConfig);
+
+  //       // 如果换行后超出容器高度，说明无法换行
+  //       if (newY + comp.height > containerHeight) {
+  //         return { affected: [], canResize: false };
+  //       }
+
+  //       const wrappedComponent = { ...comp, x: comp.x, y: newY };
+  //       componentsToMove.push(wrappedComponent);
+  //     }
+  //   }
+
+  //   affected.push(...componentsToMove);
+  //   return { affected, canResize: true };
+  // }
+  private handleWrapScenario(
+    allComponents: ComponentItemModel[],
+    originalResizingComponent: ComponentItemModel,
+    resizedComponent: ComponentItemModel,
+    rightComponents: ComponentItemModel[],
+    componentToWrap: ComponentItemModel,
+    containerInfo: ContainerInfo,
+    gridConfig: GridConfig
+  ): { affected: ComponentItemModel[]; canResize: boolean } {
+    const { width: containerWidth, height: containerHeight } = containerInfo;
+    const { gap } = gridConfig;
+    const affected: ComponentItemModel[] = [];
+  
+    // 找出需要换行的组件及其右侧的所有组件
+    const wrapIndex = rightComponents.findIndex(comp => comp.id === componentToWrap.id);
+    const componentsToWrap = rightComponents.slice(wrapIndex);
+    const componentsToMove = rightComponents.slice(0, wrapIndex);
+  
+    // 计算需要移动的组件的移动距离（不包括换行组件）
+    const moveDistances = new Map<string, number>();
+    
+    for (const comp of componentsToMove) {
+      let moveDistance = 0;
+      
+      if (this.hasHorizontalCollision(resizedComponent, comp, gap)) {
+        moveDistance = Math.max(moveDistance, resizedComponent.x + resizedComponent.width + gap - comp.x);
+      }
+  
+      for (const [prevCompId, prevMoveDistance] of moveDistances) {
+        const prevComp = componentsToMove.find(c => c.id === prevCompId);
+        if (prevComp && this.hasVerticalOverlap(prevComp, comp)) {
+          const prevNewX = prevComp.x + prevMoveDistance;
+          const prevNewRightEdge = prevNewX + prevComp.width;
+          const requiredDistance = prevNewRightEdge + gap - comp.x;
+          if (requiredDistance > moveDistance) {
+            moveDistance = requiredDistance;
+          }
+        }
+      }
+  
+      moveDistances.set(comp.id, moveDistance);
+    }
+  
+    // 移动不需要换行的组件
+    for (const comp of componentsToMove) {
+      const moveDistance = moveDistances.get(comp.id) || 0;
+      if (moveDistance > 0) {
+        const newX = comp.x + moveDistance;
+        affected.push({
+          ...comp,
+          x: newX
+        });
+      }
+    }
+  
+    // 处理需要换行的组件：从底部开始向上排列
+    const existingComponentsAfterMove = [
+      ...allComponents.filter(comp => 
+        comp.id !== originalResizingComponent.id && 
+        !rightComponents.some(rc => rc.id === comp.id)
+      ),
+      resizedComponent,
+      ...affected
+    ];
+  
+    const wrapX = containerWidth - componentToWrap.width;
+    
+    // 计算换行组件的总高度（包括间隙）
+    const totalWrapHeight = componentsToWrap.reduce((total, comp, index) => {
+      return total + comp.height + (index < componentsToWrap.length - 1 ? gap : 0);
+    }, 0);
+  
+    // 从容器底部开始向上排列换行组件
+    let currentY = containerHeight - totalWrapHeight;
+  
+    // 如果从底部开始放不下，就从顶部开始（fallback）
+    if (currentY < 0) {
+      currentY = 0;
+    }
+  
+    for (const comp of componentsToWrap) {
+      const wrapPosition = this.findWrapPositionFromBottom(
+        existingComponentsAfterMove,
+        comp,
+        wrapX,
+        currentY,
+        containerHeight,
+        gridConfig
+      );
+  
+      if (wrapPosition !== null) {
+        affected.push({
+          ...comp,
+          x: wrapX,
+          y: wrapPosition
+        });
+        // 移动到下一个位置（当前组件下方）
+        currentY = wrapPosition + comp.height + gap;
+      } else {
+        // 无法找到合适的换行位置
+        return { affected: [], canResize: false };
+      }
+    }
+  
+    return { affected, canResize: true };
+  }
+  
+  // 从指定Y位置开始向下搜索可用位置
+  private findWrapPositionFromBottom(
+    existingComponents: ComponentItemModel[],
+    component: ComponentItemModel,
+    wrapX: number,
+    startY: number,
+    containerHeight: number,
+    gridConfig: GridConfig
+  ): number | null {
+    const { gap } = gridConfig;
+    const componentHeight = component.height;
+  
+    // 从startY开始向下搜索可用位置
+    for (let y = startY; y <= containerHeight - componentHeight; y += gap) {
+      const testBounds = {
+        x: wrapX,
+        y: y,
+        width: component.width,
+        height: componentHeight
+      };
+  
+      const hasCollision = existingComponents.some(existingComp =>
+        this.hasCollision(testBounds, existingComp, gap)
+      );
+  
+      if (!hasCollision) {
+        return y;
+      }
+    }
+  
+    return null;
+  }
+  
+  // 修改主方法中的换行检测逻辑，确保正确识别最先到达边缘的组件
   private handleRightExpansion(
     components: ComponentItemModel[],
     resizingComponent: ComponentItemModel,
@@ -383,6 +642,7 @@ class LayoutManager {
     const affected: ComponentItemModel[] = [];
     const { width: containerWidth, height: containerHeight } = containerInfo;
     const { gap } = gridConfig;
+  
     const resizedComponent = {
       ...resizingComponent,
       x: newPosition.x,
@@ -390,107 +650,113 @@ class LayoutManager {
       width: newSize.width,
       height: newSize.height
     };
-
-    // 找到所有需要连锁移动的右侧组件：与调整后组件有垂直重叠且在右侧的组件
-    const rightComponents = components.filter(comp => {
-      if (comp.id === resizingComponent.id) return false;
-
-      // 检查垂直重叠
-      const verticalOverlap = !(resizedComponent.y + resizedComponent.height <= comp.y ||
-        comp.y + comp.height <= resizedComponent.y);
-
-      // 检查是否在原始组件的右侧
-      const isOnRight = comp.x >= resizingComponent.x + resizingComponent.width + gap;
-
-      return verticalOverlap && isOnRight;
-    });
-
+  
+    const newRightEdge = resizedComponent.x + resizedComponent.width;
+  
+    // 找出所有可能受影响的右侧组件（有垂直重叠且在右侧）
+    const rightComponents = components.filter(comp => 
+      comp.id !== resizingComponent.id &&
+      this.hasVerticalOverlap(resizedComponent, comp) &&
+      comp.x >= resizingComponent.x + resizingComponent.width + gap
+    );
+  
     if (rightComponents.length === 0) {
       return { affected: [], canResize: true };
     }
-
+  
     // 按x坐标排序，从左到右处理
-    rightComponents.sort((a, b) => a.x - b.x);
-
-    const componentsToMove: ComponentItemModel[] = [];
-    const componentsToWrap: ComponentItemModel[] = [];
-
-    // 计算推动距离：确保所有右侧组件都能安全移动
-    const newRightEdge = resizedComponent.x + resizedComponent.width;
-    let pushDistance = 0;
-
-    // 计算调整后组件与第一个右侧组件的碰撞距离
-    const firstRightComponent = rightComponents[0]!;
-    const requiredDistance = newRightEdge + gap - firstRightComponent.x;
-
-    if (requiredDistance <= 0) {
-      // 没有碰撞，不需要移动
-      return { affected: [], canResize: true };
-    }
-
-    pushDistance = requiredDistance;
-
-    // 检查连锁碰撞：确保推动后的组件不会相互碰撞
-    for (let i = 0; i < rightComponents.length - 1; i++) {
-      const currentComp = rightComponents[i]!;
-      const nextComp = rightComponents[i + 1];
-
-      const currentNewX = currentComp.x + pushDistance;
-      const currentNewRightEdge = currentNewX + currentComp.width;
-      const requiredGapToNext = nextComp ? currentNewRightEdge + gap - nextComp.x : 0;
-
-      if (requiredGapToNext > 0) {
-        // 当前组件推动后会与下一个组件碰撞，需要增加推动距离
-        pushDistance += requiredGapToNext;
+    const sortedComponents = [...rightComponents].sort((a, b) => a.x - b.x);
+  
+    // 第一轮：计算所有组件需要的移动距离
+    const moveDistances = new Map<string, number>();
+    
+    for (const comp of sortedComponents) {
+      let moveDistance = 0;
+      
+      // 计算与调整后组件的碰撞距离
+      if (this.hasHorizontalCollision(resizedComponent, comp, gap)) {
+        moveDistance = Math.max(moveDistance, newRightEdge + gap - comp.x);
       }
-    }
-
-    // 所有右侧组件都需要按相同距离移动（连锁反应）
-    for (const comp of rightComponents) {
-      const newX = comp.x + pushDistance;
-
-      // 检查推动后是否超出容器宽度
-      if (newX + comp.width > containerWidth) {
-        // 需要换行
-        pushDistance = 0
-
-        // 换行的组件保持在最右侧
-        componentsToWrap.push({
-          ...comp,
-          x: containerWidth - comp.width
-        });
-      } else {
-        // 可以推动到新位置
-        componentsToMove.push({ ...comp, x: newX, y: comp.y });
-      }
-    }
-
-    // 处理需要换行的组件
-    if (componentsToWrap.length > 0) {
-      // 停止条件1：右侧组件到达容器右边缘并无法换行
-      for (const comp of componentsToWrap) {
-        const tempAllComponents = [
-          ...components.filter(c => c.id !== resizingComponent.id && !rightComponents.some(rc => rc.id === c.id)),
-          resizedComponent,
-          ...componentsToMove
-        ];
-
-        const newY = this.findPositionBelowComponent(tempAllComponents, comp, gridConfig);
-
-        // 如果换行后超出容器高度，说明无法换行
-        if (newY + comp.height > containerHeight) {
-          return { affected: [], canResize: false };
+  
+      // 计算与前面已移动组件的连锁碰撞
+      for (const [prevCompId, prevMoveDistance] of moveDistances) {
+        const prevComp = sortedComponents.find(c => c.id === prevCompId);
+        if (prevComp && this.hasVerticalOverlap(prevComp, comp)) {
+          const prevNewX = prevComp.x + prevMoveDistance;
+          const prevNewRightEdge = prevNewX + prevComp.width;
+          const requiredDistance = prevNewRightEdge + gap - comp.x;
+          if (requiredDistance > moveDistance) {
+            moveDistance = requiredDistance;
+          }
         }
-
-        const wrappedComponent = { ...comp, x: comp.x, y: newY };
-        componentsToMove.push(wrappedComponent);
+      }
+  
+      moveDistances.set(comp.id, moveDistance);
+    }
+  
+    // 检查是否需要换行：找出最先到达右边缘的组件
+    let firstComponentToHitEdge: ComponentItemModel | null = null;
+    let minDistanceToEdge = Infinity;
+  
+    for (const comp of sortedComponents) {
+      const moveDistance = moveDistances.get(comp.id) || 0;
+      const newX = comp.x + moveDistance;
+      const newRightEdge = newX + comp.width;
+      
+      if (newRightEdge > containerWidth) {
+        const distanceToEdge = newRightEdge - containerWidth;
+        // 选择超出边界距离最小的组件，即最先到达边缘的
+        if (distanceToEdge < minDistanceToEdge) {
+          minDistanceToEdge = distanceToEdge;
+          firstComponentToHitEdge = comp;
+        }
       }
     }
-
-    affected.push(...componentsToMove);
+  
+    // 如果有组件会超出右边界，让最先到达边缘的组件及其右侧所有组件换行
+    if (firstComponentToHitEdge) {
+      return this.handleWrapScenario(
+        components,
+        resizingComponent,
+        resizedComponent,
+        sortedComponents,
+        firstComponentToHitEdge,
+        containerInfo,
+        gridConfig
+      );
+    }
+  
+    // 没有组件超出边界，直接移动所有组件
+    for (const comp of sortedComponents) {
+      const moveDistance = moveDistances.get(comp.id) || 0;
+      if (moveDistance > 0) {
+        const newX = comp.x + moveDistance;
+        affected.push({
+          ...comp,
+          x: newX
+        });
+      }
+    }
+  
     return { affected, canResize: true };
   }
-
+  
+  // 辅助方法保持不变
+  private hasVerticalOverlap(compA: ComponentItemModel, compB: ComponentItemModel): boolean {
+    return !(compA.y + compA.height <= compB.y || compB.y + compB.height <= compA.y);
+  }
+  
+  private hasHorizontalCollision(compA: ComponentItemModel, compB: ComponentItemModel, gap: number): boolean {
+    const compARight = compA.x + compA.width;
+    return compARight + gap > compB.x && this.hasVerticalOverlap(compA, compB);
+  }
+  
+  private hasCollision(compA: ComponentItemModel, compB: ComponentItemModel, gap: number): boolean {
+    const horizontalCollision = !(compA.x + compA.width + gap <= compB.x || compB.x + compB.width + gap <= compA.x);
+    const verticalCollision = !(compA.y + compA.height + gap <= compB.y || compB.y + compB.height + gap <= compA.y);
+    return horizontalCollision && verticalCollision;
+  }
+  
   private handleBottomExpansion(
     components: ComponentItemModel[],
     resizingComponent: ComponentItemModel,
