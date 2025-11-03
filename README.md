@@ -24,105 +24,157 @@ npm install grid-drag
 
 ```vue
 <template>
-  <GridDrag
-    :component-library="componentLibrary"
-    v-model:added-components="addedComponents"
-  >
-    <template #item="{ itemData }">
-      <div class="your-component">
-        {{ itemData.name }}
-      </div>
-    </template>
-  </GridDrag>
+  <div class="demo-container">
+    <GridHeader :component-library="componentLibrary" @confirm-add="addComponents" @save="saveLayout">
+    </GridHeader>
+    <div class="demo-content">
+      <GridLayout ref="gridLayoutRef" :layout.sync="layout" :col-num="24" :row-height="30" :prevent-overflow="true"
+        :is-bounded="true">
+        <GridItem v-for="item in layout" class="component-item" :key="item.i" :x="item.x" :y="item.y" :w="item.w"
+          :h="item.h" :i="item.i" :static="item.static" @remove="removeItem">
+        </GridItem>
+      </GridLayout>
+    </div>
+  </div>
 </template>
 
 <script setup>
 import { ref } from 'vue'
-import { GridDrag } from 'grid-drag'
+import { GridLayout, GridItem, GridHeader } from 'grid-drag'
 import 'grid-drag/lib/style.css'
+import {
+  gridItemWidthToColNum,
+  gridItemHeightToRowNum,
+  type Layout,
+  type LayoutItem
+} from 'grid-drag';
 
 const componentLibrary = ref([
   {
-    id: '1',
-    type: 'chart',
-    name: 'Chart Component',
-    width: 400,
-    height: 300,
+    type: 'line-bar',
+    name: '折线图',
+    w: 400,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'chart-bar',
+    name: '柱状图',
+    w: 350,   // 像素
+    h: 200,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'chart-pie',
+    name: '饼图',
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'table',
+    name: '数据表格',
+    w: 600,   // 像素
+    h: 400,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'card',
+    name: '数据卡片',
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'metric',
+    name: '指标卡',
+    w: 300,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'text',
+    name: '文本组件',
+    w: 320,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'image',
+    name: '图片组件',
+    w: 400,   // 像素
+    h: 300,  // 像素
+    i: useId(),
+    x: 0,
+    y: 0
+  },
+  {
+    type: 'progress',
+    name: '进度条',
+    w: 360,   // 像素
+    h: 300,  // 像素
+    i: useId(),
     x: 0,
     y: 0
   }
 ])
 
-const addedComponents = ref([])
+const layout = ref<Layout>([])
+const addComponents = (components: Layout) => {
+  // 转换组件尺寸为网格单位
+  const convertedComponents = components.map(item => ({
+    ...item,
+    w: gridItemWidthToColNum(
+      gridLayoutRef.value.width,
+      gridLayoutRef.value.colNum,
+      gridLayoutRef.value.margin[0],
+      item.w
+    ),
+    h: gridItemHeightToRowNum(
+      gridLayoutRef.value.rowHeightComputed,
+      gridLayoutRef.value.margin[1],
+      item.h
+    )
+  }))
+
+  // 使用智能添加方法
+  const result = gridLayoutRef.value.addItemsIntelligently(convertedComponents)
+
+  layout.value = [...layout.value, ...result.addedItems]
+  if (result.failedItems.length > 0) {
+    console.warn(`无法添加 ${result.failedItems.length} 个组件，容器空间不足`)
+    // 可以在这里添加用户提示
+  }
+
+  if (result.success) {
+    console.log(`成功添加 ${result.addedItems.length} 个组件`)
+  }
+}
+
+const removeItem = (id?: string) => {
+  if (id) {
+    const index = layout.value.findIndex(item => item.i === id)
+
+    if (index >= 0) {
+      layout.value.splice(index, 1)
+    }
+  }
+}
 </script>
-```
-
-### Global Registration
-
-```js
-import { createApp } from 'vue'
-import GridDrag from 'grid-drag'
-import 'grid-drag/lib/style.css'
-
-const app = createApp(App)
-app.use(GridDrag)
-```
-
-## API
-
-### GridDrag Props
-
-| Prop | Type | Default | Description |
-|------|------|---------|-------------|
-| `component-library` | `ComponentItemModel[]` | `[]` | Available components for adding |
-| `added-components` | `ComponentItemModel[]` | `[]` | Currently added components (v-model) |
-
-### GridDrag Events
-
-| Event | Payload | Description |
-|-------|---------|-------------|
-| `update:added-components` | `ComponentItemModel[]` | Emitted when components change |
-
-### Types
-
-```typescript
-interface ComponentItemModel {
-  id: string
-  type?: string
-  name: string
-  width: number
-  height: number
-  x: number
-  y: number
-  minWidth?: number
-  minHeight?: number
-}
-
-interface GridConfig {
-  gap: number
-  cellWidth: number
-}
-
-interface Position {
-  x: number
-  y: number
-}
-
-interface Size {
-  width: number
-  height: number
-}
-```
-
-### Utility Functions
-
-```typescript
-import {
-  validatePosition,
-  findAvailablePosition,
-  snapToGrid,
-  reorganizeLayout
-} from 'grid-drag'
 ```
 
 ## Advanced Features
