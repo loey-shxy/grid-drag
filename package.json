@@ -11,6 +11,10 @@
   "files": [
     "lib"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/loey-shxy/grid-drag"
+  },
   "dependencies": {
     "@interactjs/actions": "^1.10.27",
     "@interactjs/auto-scroll": "^1.10.27",

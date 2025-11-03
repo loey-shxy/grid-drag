@@ -1,5 +1,5 @@
 import { App } from 'vue';
-export * from './types/layout';
+export * from './helpers';
 declare const _default: {
     install: (app: App) => void;
 };

@@ -1,10 +1,10 @@
 declare function __VLS_template(): {
     attrs: Partial<{}>;
-    slots: {
-        default?(_: {}): any;
+    slots: any;
+    refs: {
+        addComponentRef: unknown;
     };
-    refs: {};
-    rootEl: HTMLDivElement;
+    rootEl: any;
 };
 type __VLS_TemplateResult = ReturnType<typeof __VLS_template>;
 declare const __VLS_component: any;

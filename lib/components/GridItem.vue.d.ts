@@ -1,11 +1,15 @@
 declare function __VLS_template(): {
     attrs: Partial<{}>;
-    slots: any;
-    refs: {
-        gridContainer: HTMLDivElement;
-        addComponentRef: unknown;
+    slots: {
+        default?(_: {
+            style: any;
+        }): any;
     };
-    rootEl: any;
+    refs: {
+        gridItemRef: HTMLDivElement;
+        handle: HTMLSpanElement;
+    };
+    rootEl: HTMLDivElement;
 };
 type __VLS_TemplateResult = ReturnType<typeof __VLS_template>;
 declare const __VLS_component: any;
